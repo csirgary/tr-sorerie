@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#F8F7F4">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Mon Budget">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>Mon Budget</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body,#root{height:100%;font-family:'DM Sans','Helvetica Neue',sans-serif;background:#F8F7F4;color:#1a1a18;-webkit-font-smoothing:antialiased}
+input,select,button,textarea{font-family:inherit}
+::-webkit-scrollbar{width:4px}
+::-webkit-scrollbar-thumb{background:#d0d0c8;border-radius:2px}
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+
+<script type="text/babel">
+const { useState, useEffect, useCallback, useMemo } = React;
+
+const STORAGE_KEY = "budget-app-data";
+
+const DEFAULT_CATEGORIES = {
+  fixes: [
+    { id: "cat-1", name: "Loyer/Logement", type: "fixe" },
+    { id: "cat-2", name: "Électricité", type: "fixe" },
+    { id: "cat-3", name: "Eau", type: "fixe" },
+    { id: "cat-4", name: "Internet/Téléphone", type: "fixe" },
+    { id: "cat-5", name: "Assurances", type: "fixe" },
+    { id: "cat-6", name: "Prêts", type: "fixe" },
+    { id: "cat-7", name: "Abonnements", type: "fixe" },
+  ],
+  variables: [
+    { id: "cat-8", name: "Alimentation", type: "variable" },
+    { id: "cat-9", name: "Transport/Carburant", type: "variable" },
+    { id: "cat-10", name: "Santé", type: "variable" },
+    { id: "cat-11", name: "Loisirs/Sorties", type: "variable" },
+    { id: "cat-12", name: "Vêtements", type: "variable" },
+    { id: "cat-13", name: "Enfant(s)", type: "variable" },
+    { id: "cat-14", name: "Épargne", type: "variable" },
+    { id: "cat-15", name: "Divers", type: "variable" },
+  ],
+};
+
+const ACCOUNTS = [
+  { id: "ca", name: "Crédit Agricole", color: "#1D9E75", short: "CA" },
+  { id: "bourso", name: "Boursorama", color: "#D85A30", short: "BR" },
+  { id: "ce", name: "Caisse d'Épargne", color: "#378ADD", short: "CE" },
+];
+
+const MONTHS_FR = ["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"];
+
+function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+function fmt(n) { return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" }).format(n); }
+function getMonthKey(date) { const d = new Date(date); return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0"); }
+function getCurrentMonthKey() { const n = new Date(); return n.getFullYear() + "-" + String(n.getMonth()+1).padStart(2,"0"); }
+function parseMonthKey(key) { const [y,m] = key.split("-").map(Number); return {year:y,month:m}; }
+
+function getDefaultData() {
+  return { categories: [...DEFAULT_CATEGORIES.fixes, ...DEFAULT_CATEGORIES.variables], expenses: [], fixedExpenses: [], incomes: [], budgets: [], loans: [] };
+}
+function loadData() { try { const r = localStorage.getItem(STORAGE_KEY); if(r) return {...getDefaultData(),...JSON.parse(r)}; } catch{} return getDefaultData(); }
+function saveData(data) { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }
+
+function computeAmortization(capital, annualRate, durationMonths, startDate) {
+  const mr = annualRate / 100 / 12;
+  const mens = mr > 0 ? (capital * mr) / (1 - Math.pow(1 + mr, -durationMonths)) : capital / durationMonths;
+  const rows = []; let rem = capital; const start = new Date(startDate);
+  for (let i = 0; i < durationMonths; i++) {
+    const interest = rem * mr; const princ = mens - interest;
+    rem = Math.max(0, rem - princ);
+    const d = new Date(start); d.setMonth(d.getMonth() + i);
+    rows.push({ month:i+1, date:d.toISOString().slice(0,10), mensualite:Math.round(mens*100)/100, interest:Math.round(interest*100)/100, principal:Math.round(princ*100)/100, remaining:Math.round(rem*100)/100 });
+  }
+  return { mensualite: Math.round(mens*100)/100, rows };
+}
+
+// === SVG Icons ===
+function Icon({name, size=22}) {
+  const s = {width:size,height:size};
+  const p = {fill:"none",stroke:"currentColor",strokeWidth:1.8,strokeLinecap:"round",strokeLinejoin:"round"};
+  const icons = {
+    dashboard: <svg style={s} viewBox="0 0 24 24" {...p}><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/></svg>,
+    expense: <svg style={s} viewBox="0 0 24 24" {...p}><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>,
+    budget: <svg style={s} viewBox="0 0 24 24" {...p}><path d="M21 12a9 9 0 11-6.2-8.6"/><path d="M21 3v6h-6"/></svg>,
+    loan: <svg style={s} viewBox="0 0 24 24" {...p}><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>,
+    settings: <svg style={s} viewBox="0 0 24 24" {...p}><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>,
+    plus: <svg style={{width:18,height:18}} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>,
+    close: <svg style={{width:20,height:20}} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>,
+    trash: <svg style={{width:16,height:16}} viewBox="0 0 24 24" {...p}><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>,
+    edit: <svg style={{width:16,height:16}} viewBox="0 0 24 24" {...p}><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>,
+    chevDown: <svg style={{width:16,height:16}} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>,
+  };
+  return icons[name] || null;
+}
+
+// === Styles ===
+const S = {
+  app: { background:"#F8F7F4", minHeight:"100vh", maxWidth:480, margin:"0 auto", paddingBottom:80, color:"#1a1a18", position:"relative" },
+  header: { padding:"20px 20px 0", display:"flex", justifyContent:"space-between", alignItems:"center" },
+  headerTitle: { fontSize:22, fontWeight:700, letterSpacing:"-0.02em" },
+  headerSub: { fontSize:13, color:"#8a8a85", fontWeight:400, marginTop:2 },
+  nav: { position:"fixed", bottom:0, left:"50%", transform:"translateX(-50%)", width:"100%", maxWidth:480, background:"#FFFFFF", borderTop:"1px solid #e8e7e3", display:"flex", justifyContent:"space-around", padding:"6px 0 max(env(safe-area-inset-bottom),8px)", zIndex:100 },
+  navItem: (a) => ({ display:"flex", flexDirection:"column", alignItems:"center", gap:2, padding:"6px 12px", border:"none", background:"none", color:a?"#1D9E75":"#a0a09a", fontSize:10, fontWeight:a?600:400, cursor:"pointer" }),
+  card: { background:"#FFFFFF", borderRadius:16, padding:"16px 18px", margin:"0 16px 12px", boxShadow:"0 1px 3px rgba(0,0,0,0.04)", border:"1px solid #f0efeb" },
+  cardTitle: { fontSize:13, fontWeight:600, color:"#8a8a85", textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:10 },
+  bigNumber: { fontSize:28, fontWeight:700, letterSpacing:"-0.02em" },
+  accountBadge: (c) => ({ display:"inline-flex", alignItems:"center", gap:6, padding:"4px 10px", borderRadius:20, background:c+"12", color:c, fontSize:12, fontWeight:600 }),
+  btn: (v) => ({ display:"inline-flex", alignItems:"center", justifyContent:"center", gap:6, padding:v==="sm"?"8px 14px":"12px 20px", borderRadius:12, border:v==="ghost"?"1px solid #e0dfdb":"none", background:v==="primary"?"#1D9E75":v==="danger"?"#E24B4A":"transparent", color:v==="primary"||v==="danger"?"#fff":"#1a1a18", fontSize:v==="sm"?13:14, fontWeight:600, cursor:"pointer" }),
+  input: { width:"100%", padding:"12px 14px", borderRadius:10, border:"1.5px solid #e8e7e3", fontSize:15, fontFamily:"inherit", color:"#1a1a18", background:"#FAFAF8", outline:"none" },
+  label: { fontSize:13, fontWeight:600, color:"#555550", marginBottom:6, display:"block" },
+  formGroup: { marginBottom:16 },
+  select: { width:"100%", padding:"12px 14px", borderRadius:10, border:"1.5px solid #e8e7e3", fontSize:15, fontFamily:"inherit", color:"#1a1a18", background:"#FAFAF8", outline:"none", WebkitAppearance:"none" },
+  modal: { position:"fixed", inset:0, background:"rgba(0,0,0,0.3)", backdropFilter:"blur(4px)", WebkitBackdropFilter:"blur(4px)", display:"flex", alignItems:"flex-end", justifyContent:"center", zIndex:200 },
+  modalContent: { background:"#FFFFFF", borderRadius:"20px 20px 0 0", padding:"24px 20px 32px", width:"100%", maxWidth:480, maxHeight:"85vh", overflowY:"auto" },
+  modalHeader: { display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 },
+  modalTitle: { fontSize:18, fontWeight:700 },
+  fab: { position:"fixed", bottom:76, right:"calc(50% - 210px)", width:52, height:52, borderRadius:16, background:"#1D9E75", color:"#fff", border:"none", display:"flex", alignItems:"center", justifyContent:"center", boxShadow:"0 4px 16px rgba(29,158,117,0.35)", cursor:"pointer", zIndex:90 },
+  tag: (c) => ({ display:"inline-block", padding:"3px 8px", borderRadius:6, background:(c||"#8a8a85")+"18", color:c||"#555550", fontSize:11, fontWeight:600 }),
+  emptyState: { textAlign:"center", padding:"40px 20px", color:"#a0a09a", fontSize:14 },
+};
+
+function Modal({open,onClose,title,children}) {
+  if(!open) return null;
+  return <div style={S.modal} onClick={e=>e.target===e.currentTarget&&onClose()}>
+    <div style={S.modalContent}>
+      <div style={S.modalHeader}><span style={S.modalTitle}>{title}</span><button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"#8a8a85"}}><Icon name="close"/></button></div>
+      {children}
+    </div>
+  </div>;
+}
+
+function Field({label,children}) { return <div style={S.formGroup}><label style={S.label}>{label}</label>{children}</div>; }
+
+function ProgressBar({pct,color}) {
+  return <div style={{height:6,borderRadius:3,background:"#eeeee8",overflow:"hidden"}}>
+    <div style={{height:"100%",borderRadius:3,width:Math.min(pct,100)+"%",background:pct>100?"#E24B4A":color||"#1D9E75",transition:"width 0.4s ease"}}/>
+  </div>;
+}
+
+// ========== DASHBOARD ==========
+function Dashboard({data,monthKey}) {
+  const {year,month} = parseMonthKey(monthKey);
+  const mExp = data.expenses.filter(e=>getMonthKey(e.date)===monthKey);
+  const mFix = data.fixedExpenses.filter(f=>{
+    if(f.frequency==="mensuelle") return true;
+    if(f.frequency==="annuelle"){ return new Date(f.date).getMonth()+1===month; }
+    return false;
+  });
+  const mInc = data.incomes.filter(i=>getMonthKey(i.date)===monthKey);
+  const totInc = mInc.reduce((s,i)=>s+Number(i.amount),0);
+  const totExp = mExp.reduce((s,e)=>s+Number(e.amount),0);
+  const totFix = mFix.reduce((s,f)=>s+Number(f.amount),0);
+  const totAll = totExp+totFix;
+  const balance = totInc-totAll;
+
+  const byAcc = ACCOUNTS.map(acc=>{
+    const inc = mInc.filter(i=>i.account===acc.id).reduce((s,i)=>s+Number(i.amount),0);
+    const exp = mExp.filter(e=>e.account===acc.id).reduce((s,e)=>s+Number(e.amount),0);
+    const fix = mFix.filter(f=>f.account===acc.id).reduce((s,f)=>s+Number(f.amount),0);
+    return {...acc,income:inc,expenses:exp+fix,balance:inc-exp-fix};
+  });
+
+  const topCats = {};
+  mExp.forEach(e=>{ topCats[e.category]=(topCats[e.category]||0)+Number(e.amount); });
+  const topList = Object.entries(topCats).sort((a,b)=>b[1]-a[1]).slice(0,5).map(([cid,amt])=>({ name:data.categories.find(c=>c.id===cid)?.name||cid, amount:amt }));
+
+  return <div>
+    <div style={S.header}><div><div style={S.headerTitle}>Tableau de bord</div><div style={S.headerSub}>{MONTHS_FR[month-1]} {year}</div></div></div>
+    <div style={{padding:"16px 0 0"}}>
+      <div style={{...S.card,background:balance>=0?"linear-gradient(135deg,#1D9E75 0%,#15785A 100%)":"linear-gradient(135deg,#E24B4A 0%,#c23130 100%)",color:"#fff",border:"none"}}>
+        <div style={{fontSize:12,fontWeight:500,opacity:0.8,textTransform:"uppercase",letterSpacing:"0.06em"}}>Solde du mois</div>
+        <div style={{...S.bigNumber,color:"#fff",marginTop:4}}>{fmt(balance)}</div>
+        <div style={{display:"flex",justifyContent:"space-between",marginTop:14,fontSize:13,opacity:0.85}}>
+          <span>Revenus : {fmt(totInc)}</span><span>Dépenses : {fmt(totAll)}</span>
+        </div>
+      </div>
+      <div style={{display:"flex",gap:8,padding:"0 16px",marginBottom:12,overflowX:"auto"}}>
+        {byAcc.map(acc=><div key={acc.id} style={{...S.card,margin:0,minWidth:135,flex:"1 0 auto",padding:"12px 14px"}}>
+          <div style={S.accountBadge(acc.color)}><span style={{width:8,height:8,borderRadius:4,background:acc.color}}/>{acc.short}</div>
+          <div style={{fontSize:18,fontWeight:700,marginTop:8}}>{fmt(acc.balance)}</div>
+          <div style={{fontSize:11,color:"#8a8a85",marginTop:2}}>+{fmt(acc.income)} / -{fmt(acc.expenses)}</div>
+        </div>)}
+      </div>
+      <div style={S.card}>
+        <div style={S.cardTitle}>Top catégories</div>
+        {topList.length===0&&<div style={{color:"#a0a09a",fontSize:13}}>Aucune dépense ce mois</div>}
+        {topList.map((c,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:i<topList.length-1?"1px solid #f0efeb":"none"}}>
+          <span style={{fontSize:14}}>{c.name}</span><span style={{fontSize:14,fontWeight:600}}>{fmt(c.amount)}</span>
+        </div>)}
+      </div>
+      <div style={S.card}>
+        <div style={S.cardTitle}>Charges fixes du mois</div>
+        <div style={{...S.bigNumber,fontSize:22}}>{fmt(totFix)}</div>
+        <div style={{fontSize:12,color:"#8a8a85",marginTop:4}}>{mFix.length} prélèvement(s)</div>
+      </div>
+    </div>
+  </div>;
+}
+
+// ========== EXPENSES ==========
+function ExpensesPage({data,setData,monthKey}) {
+  const [tab,setTab] = useState("ponctuelle");
+  const [showModal,setShowModal] = useState(false);
+  const [editItem,setEditItem] = useState(null);
+  const [showIncModal,setShowIncModal] = useState(false);
+  const {month} = parseMonthKey(monthKey);
+
+  const mExp = data.expenses.filter(e=>getMonthKey(e.date)===monthKey);
+  const mFix = data.fixedExpenses.filter(f=>{ if(f.frequency==="mensuelle") return true; if(f.frequency==="annuelle") return new Date(f.date).getMonth()+1===month; return false; });
+  const mInc = data.incomes.filter(i=>getMonthKey(i.date)===monthKey);
+
+  function saveExp(item) {
+    const u={...data};
+    if(tab==="ponctuelle"){ if(editItem) u.expenses=u.expenses.map(e=>e.id===editItem.id?{...editItem,...item}:e); else u.expenses=[...u.expenses,{id:uid(),...item}]; }
+    else { if(editItem) u.fixedExpenses=u.fixedExpenses.map(e=>e.id===editItem.id?{...editItem,...item}:e); else u.fixedExpenses=[...u.fixedExpenses,{id:uid(),...item}]; }
+    setData(u); setShowModal(false); setEditItem(null);
+  }
+  function saveInc(item) {
+    const u={...data};
+    if(editItem) u.incomes=u.incomes.map(i=>i.id===editItem.id?{...editItem,...item}:i); else u.incomes=[...u.incomes,{id:uid(),...item}];
+    setData(u); setShowIncModal(false); setEditItem(null);
+  }
+  function delExp(id) { const u={...data}; if(tab==="ponctuelle") u.expenses=u.expenses.filter(e=>e.id!==id); else u.fixedExpenses=u.fixedExpenses.filter(e=>e.id!==id); setData(u); }
+  function delInc(id) { setData({...data,incomes:data.incomes.filter(i=>i.id!==id)}); }
+
+  const items = tab==="ponctuelle"?mExp:tab==="fixe"?mFix:mInc;
+
+  return <div>
+    <div style={S.header}><div><div style={S.headerTitle}>Dépenses & Revenus</div><div style={S.headerSub}>{MONTHS_FR[parseMonthKey(monthKey).month-1]} {parseMonthKey(monthKey).year}</div></div></div>
+    <div style={{display:"flex",gap:6,padding:"16px 16px 8px",overflowX:"auto"}}>
+      {[{k:"ponctuelle",l:"Ponctuelles"},{k:"fixe",l:"Fixes"},{k:"revenu",l:"Revenus"}].map(t=>
+        <button key={t.k} onClick={()=>setTab(t.k)} style={{padding:"8px 16px",borderRadius:20,border:"none",background:tab===t.k?"#1a1a18":"#eeeee8",color:tab===t.k?"#fff":"#555550",fontSize:13,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap"}}>{t.l}</button>
+      )}
+    </div>
+    <div style={{padding:"8px 0"}}>
+      {items.length===0&&<div style={S.emptyState}>Aucun élément pour ce mois</div>}
+      {items.map(item=>{
+        const acc=ACCOUNTS.find(a=>a.id===item.account);
+        const cat=data.categories.find(c=>c.id===item.category);
+        return <div key={item.id} style={{...S.card,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontSize:15,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.label}</div>
+            <div style={{display:"flex",gap:6,marginTop:4,flexWrap:"wrap"}}>
+              {cat&&<span style={S.tag()}>{cat.name}</span>}
+              {acc&&<span style={S.tag(acc.color)}>{acc.short}</span>}
+              {item.frequency&&<span style={S.tag("#378ADD")}>{item.frequency}</span>}
+              <span style={{fontSize:11,color:"#a0a09a"}}>{item.date?new Date(item.date).toLocaleDateString("fr-FR"):"Jour "+(item.dayOfMonth||"?")}</span>
+            </div>
+          </div>
+          <div style={{textAlign:"right",display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
+            <span style={{fontSize:15,fontWeight:700,color:tab==="revenu"?"#1D9E75":"#E24B4A"}}>{tab==="revenu"?"+":"-"}{fmt(item.amount)}</span>
+            <button onClick={()=>{setEditItem(item);tab==="revenu"?setShowIncModal(true):setShowModal(true);}} style={{background:"none",border:"none",cursor:"pointer",color:"#a0a09a",padding:4}}><Icon name="edit" size={16}/></button>
+            <button onClick={()=>tab==="revenu"?delInc(item.id):delExp(item.id)} style={{background:"none",border:"none",cursor:"pointer",color:"#E24B4A",padding:4}}><Icon name="trash" size={16}/></button>
+          </div>
+        </div>;
+      })}
+    </div>
+    <button onClick={()=>{setEditItem(null);tab==="revenu"?setShowIncModal(true):setShowModal(true);}} style={S.fab}><Icon name="plus"/></button>
+    <Modal open={showModal} onClose={()=>{setShowModal(false);setEditItem(null);}} title={tab==="ponctuelle"?"Dépense ponctuelle":"Dépense fixe"}>
+      <ExpenseForm tab={tab} categories={data.categories} initial={editItem} onSave={saveExp}/>
+    </Modal>
+    <Modal open={showIncModal} onClose={()=>{setShowIncModal(false);setEditItem(null);}} title="Revenu">
+      <IncomeForm initial={editItem} onSave={saveInc}/>
+    </Modal>
+  </div>;
+}
+
+function ExpenseForm({tab,categories,initial,onSave}) {
+  const [label,setLabel]=useState(initial?.label||"");
+  const [amount,setAmount]=useState(initial?.amount||"");
+  const [date,setDate]=useState(initial?.date||new Date().toISOString().slice(0,10));
+  const [category,setCategory]=useState(initial?.category||categories[0]?.id||"");
+  const [account,setAccount]=useState(initial?.account||ACCOUNTS[0].id);
+  const [frequency,setFrequency]=useState(initial?.frequency||"mensuelle");
+  const [dayOfMonth,setDayOfMonth]=useState(initial?.dayOfMonth||"1");
+  return <div>
+    <Field label="Libellé"><input style={S.input} value={label} onChange={e=>setLabel(e.target.value)} placeholder="Ex: Courses Carrefour"/></Field>
+    <Field label="Montant (€)"><input style={S.input} type="number" inputMode="decimal" step="0.01" value={amount} onChange={e=>setAmount(e.target.value)}/></Field>
+    {tab==="ponctuelle"?
+      <Field label="Date"><input style={S.input} type="date" value={date} onChange={e=>setDate(e.target.value)}/></Field>
+    :<>
+      <Field label="Fréquence"><select style={S.select} value={frequency} onChange={e=>setFrequency(e.target.value)}><option value="mensuelle">Mensuelle</option><option value="annuelle">Annuelle</option></select></Field>
+      <Field label={frequency==="annuelle"?"Date de prélèvement":"Jour de prélèvement"}>
+        {frequency==="annuelle"?<input style={S.input} type="date" value={date} onChange={e=>setDate(e.target.value)}/>
+        :<input style={S.input} type="number" inputMode="numeric" min="1" max="31" value={dayOfMonth} onChange={e=>setDayOfMonth(e.target.value)}/>}
+      </Field>
+    </>}
+    <Field label="Catégorie"><select style={S.select} value={category} onChange={e=>setCategory(e.target.value)}>{categories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></Field>
+    <Field label="Compte"><select style={S.select} value={account} onChange={e=>setAccount(e.target.value)}>{ACCOUNTS.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></Field>
+    <button onClick={()=>onSave({label,amount:Number(amount),date,category,account,frequency:tab==="fixe"?frequency:undefined,dayOfMonth:tab==="fixe"&&frequency==="mensuelle"?dayOfMonth:undefined})} style={{...S.btn("primary"),width:"100%",marginTop:8}} disabled={!label||!amount}>{initial?"Modifier":"Ajouter"}</button>
+  </div>;
+}
+
+function IncomeForm({initial,onSave}) {
+  const [label,setLabel]=useState(initial?.label||"");
+  const [amount,setAmount]=useState(initial?.amount||"");
+  const [date,setDate]=useState(initial?.date||new Date().toISOString().slice(0,10));
+  const [account,setAccount]=useState(initial?.account||ACCOUNTS[0].id);
+  return <div>
+    <Field label="Libellé"><input style={S.input} value={label} onChange={e=>setLabel(e.target.value)} placeholder="Ex: Salaire"/></Field>
+    <Field label="Montant (€)"><input style={S.input} type="number" inputMode="decimal" step="0.01" value={amount} onChange={e=>setAmount(e.target.value)}/></Field>
+    <Field label="Date"><input style={S.input} type="date" value={date} onChange={e=>setDate(e.target.value)}/></Field>
+    <Field label="Compte"><select style={S.select} value={account} onChange={e=>setAccount(e.target.value)}>{ACCOUNTS.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></Field>
+    <button onClick={()=>onSave({label,amount:Number(amount),date,account})} style={{...S.btn("primary"),width:"100%",marginTop:8}} disabled={!label||!amount}>{initial?"Modifier":"Ajouter"}</button>
+  </div>;
+}
+
+// ========== BUDGETS ==========
+function BudgetPage({data,setData,monthKey}) {
+  const [showModal,setShowModal]=useState(false);
+  const [editItem,setEditItem]=useState(null);
+  const mExp = data.expenses.filter(e=>getMonthKey(e.date)===monthKey);
+
+  function saveBudget(item) {
+    const u={...data};
+    if(editItem) u.budgets=u.budgets.map(b=>b.id===editItem.id?{...editItem,...item}:b);
+    else u.budgets=[...u.budgets,{id:uid(),...item}];
+    setData(u); setShowModal(false); setEditItem(null);
+  }
+
+  return <div>
+    <div style={S.header}><div><div style={S.headerTitle}>Budgets</div><div style={S.headerSub}>Plafonds par catégorie</div></div></div>
+    <div style={{padding:"16px 0"}}>
+      {data.budgets.length===0&&<div style={S.emptyState}>Aucun budget défini<br/><span style={{fontSize:12}}>Ajoutez un plafond par catégorie</span></div>}
+      {data.budgets.map(budget=>{
+        const cat=data.categories.find(c=>c.id===budget.category);
+        const spent=mExp.filter(e=>e.category===budget.category).reduce((s,e)=>s+Number(e.amount),0);
+        const pct=budget.limit>0?(spent/budget.limit)*100:0;
+        const rem=budget.limit-spent;
+        return <div key={budget.id} style={S.card}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+            <span style={{fontSize:15,fontWeight:600}}>{cat?.name||"?"}</span>
+            <div style={{display:"flex",gap:6}}>
+              <button onClick={()=>{setEditItem(budget);setShowModal(true);}} style={{background:"none",border:"none",cursor:"pointer",color:"#a0a09a",padding:4}}><Icon name="edit" size={16}/></button>
+              <button onClick={()=>setData({...data,budgets:data.budgets.filter(b=>b.id!==budget.id)})} style={{background:"none",border:"none",cursor:"pointer",color:"#E24B4A",padding:4}}><Icon name="trash" size={16}/></button>
+            </div>
+          </div>
+          <div style={{display:"flex",justifyContent:"space-between",fontSize:13,marginBottom:6}}>
+            <span style={{color:"#8a8a85"}}>Dépensé : {fmt(spent)}</span><span style={{fontWeight:600}}>/ {fmt(budget.limit)}</span>
+          </div>
+          <ProgressBar pct={pct}/>
+          <div style={{fontSize:13,fontWeight:600,marginTop:6,color:rem>=0?"#1D9E75":"#E24B4A"}}>{rem>=0?"Reste "+fmt(rem):"Dépassement de "+fmt(-rem)}</div>
+        </div>;
+      })}
+    </div>
+    <button onClick={()=>{setEditItem(null);setShowModal(true);}} style={S.fab}><Icon name="plus"/></button>
+    <Modal open={showModal} onClose={()=>{setShowModal(false);setEditItem(null);}} title="Définir un budget">
+      <BudgetForm categories={data.categories} initial={editItem} onSave={saveBudget} existing={data.budgets}/>
+    </Modal>
+  </div>;
+}
+
+function BudgetForm({categories,initial,onSave,existing}) {
+  const [category,setCategory]=useState(initial?.category||categories[0]?.id||"");
+  const [limit,setLimit]=useState(initial?.limit||"");
+  const avail=categories.filter(c=>!existing.find(b=>b.category===c.id)||c.id===initial?.category);
+  return <div>
+    <Field label="Catégorie"><select style={S.select} value={category} onChange={e=>setCategory(e.target.value)}>{avail.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></Field>
+    <Field label="Plafond mensuel (€)"><input style={S.input} type="number" inputMode="decimal" step="0.01" value={limit} onChange={e=>setLimit(e.target.value)}/></Field>
+    <button onClick={()=>onSave({category,limit:Number(limit)})} style={{...S.btn("primary"),width:"100%",marginTop:8}} disabled={!limit}>{initial?"Modifier":"Ajouter"}</button>
+  </div>;
+}
+
+// ========== LOANS ==========
+function LoansPage({data,setData}) {
+  const [showModal,setShowModal]=useState(false);
+  const [editItem,setEditItem]=useState(null);
+  const [expanded,setExpanded]=useState(null);
+
+  function saveLoan(item) {
+    const u={...data};
+    if(editItem) u.loans=u.loans.map(l=>l.id===editItem.id?{...editItem,...item}:l);
+    else u.loans=[...u.loans,{id:uid(),...item}];
+    setData(u); setShowModal(false); setEditItem(null);
+  }
+
+  return <div>
+    <div style={S.header}><div><div style={S.headerTitle}>Prêts</div><div style={S.headerSub}>Suivi & amortissement</div></div></div>
+    <div style={{padding:"16px 0"}}>
+      {data.loans.length===0&&<div style={S.emptyState}>Aucun prêt enregistré</div>}
+      {data.loans.map(loan=>{
+        const amort=computeAmortization(loan.capital,loan.rate,loan.duration,loan.startDate);
+        const today=new Date();
+        const paidRows=amort.rows.filter(r=>new Date(r.date)<=today);
+        const rem=paidRows.length>0?paidRows[paidRows.length-1].remaining:loan.capital;
+        const pct=((loan.capital-rem)/loan.capital)*100;
+        const totInt=amort.rows.reduce((s,r)=>s+r.interest,0);
+        const isExp=expanded===loan.id;
+        return <div key={loan.id} style={S.card}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+            <div><div style={{fontSize:16,fontWeight:700}}>{loan.label}</div><span style={S.tag(loan.type==="auto"?"#378ADD":"#D85A30")}>{loan.type==="auto"?"Auto":"Consommation"}</span></div>
+            <div style={{display:"flex",gap:6}}>
+              <button onClick={()=>{setEditItem(loan);setShowModal(true);}} style={{background:"none",border:"none",cursor:"pointer",color:"#a0a09a",padding:4}}><Icon name="edit" size={16}/></button>
+              <button onClick={()=>setData({...data,loans:data.loans.filter(l=>l.id!==loan.id)})} style={{background:"none",border:"none",cursor:"pointer",color:"#E24B4A",padding:4}}><Icon name="trash" size={16}/></button>
+            </div>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginTop:14}}>
+            <div><div style={{fontSize:11,color:"#8a8a85",textTransform:"uppercase",letterSpacing:"0.04em"}}>Mensualité</div><div style={{fontSize:18,fontWeight:700}}>{fmt(amort.mensualite)}</div></div>
+            <div><div style={{fontSize:11,color:"#8a8a85",textTransform:"uppercase",letterSpacing:"0.04em"}}>Restant dû</div><div style={{fontSize:18,fontWeight:700,color:"#E24B4A"}}>{fmt(rem)}</div></div>
+            <div><div style={{fontSize:11,color:"#8a8a85",textTransform:"uppercase",letterSpacing:"0.04em"}}>Progression</div><div style={{fontSize:14,fontWeight:600}}>{paidRows.length}/{loan.duration} mois</div></div>
+            <div><div style={{fontSize:11,color:"#8a8a85",textTransform:"uppercase",letterSpacing:"0.04em"}}>Coût intérêts</div><div style={{fontSize:14,fontWeight:600,color:"#D85A30"}}>{fmt(totInt)}</div></div>
+          </div>
+          <div style={{marginTop:12}}><ProgressBar pct={pct} color="#1D9E75"/><div style={{fontSize:11,color:"#8a8a85",marginTop:4,textAlign:"right"}}>{Math.round(pct)}% remboursé</div></div>
+          <button onClick={()=>setExpanded(isExp?null:loan.id)} style={{...S.btn("ghost"),width:"100%",marginTop:10,fontSize:13}}>
+            {isExp?"Masquer":"Tableau d'amortissement"} <Icon name="chevDown" size={14}/>
+          </button>
+          {isExp&&<div style={{marginTop:12,maxHeight:300,overflowY:"auto",fontSize:12,WebkitOverflowScrolling:"touch"}}>
+            <table style={{width:"100%",borderCollapse:"collapse"}}>
+              <thead><tr style={{borderBottom:"2px solid #eeeee8",textAlign:"left"}}>
+                <th style={{padding:"6px 4px",color:"#8a8a85",fontWeight:600}}>N°</th>
+                <th style={{padding:"6px 4px",color:"#8a8a85",fontWeight:600}}>Date</th>
+                <th style={{padding:"6px 4px",color:"#8a8a85",fontWeight:600,textAlign:"right"}}>Capital</th>
+                <th style={{padding:"6px 4px",color:"#8a8a85",fontWeight:600,textAlign:"right"}}>Intérêts</th>
+                <th style={{padding:"6px 4px",color:"#8a8a85",fontWeight:600,textAlign:"right"}}>Restant</th>
+              </tr></thead>
+              <tbody>{amort.rows.map(row=>{
+                const isPast=new Date(row.date)<=today;
+                return <tr key={row.month} style={{borderBottom:"1px solid #f5f4f0",background:isPast?"#f0faf6":"transparent"}}>
+                  <td style={{padding:"5px 4px"}}>{row.month}</td>
+                  <td style={{padding:"5px 4px"}}>{new Date(row.date).toLocaleDateString("fr-FR",{month:"short",year:"2-digit"})}</td>
+                  <td style={{padding:"5px 4px",textAlign:"right"}}>{fmt(row.principal)}</td>
+                  <td style={{padding:"5px 4px",textAlign:"right",color:"#D85A30"}}>{fmt(row.interest)}</td>
+                  <td style={{padding:"5px 4px",textAlign:"right",fontWeight:600}}>{fmt(row.remaining)}</td>
+                </tr>;
+              })}</tbody>
+            </table>
+          </div>}
+        </div>;
+      })}
+    </div>
+    <button onClick={()=>{setEditItem(null);setShowModal(true);}} style={S.fab}><Icon name="plus"/></button>
+    <Modal open={showModal} onClose={()=>{setShowModal(false);setEditItem(null);}} title="Ajouter un prêt">
+      <LoanForm initial={editItem} onSave={saveLoan}/>
+    </Modal>
+  </div>;
+}
+
+function LoanForm({initial,onSave}) {
+  const [label,setLabel]=useState(initial?.label||"");
+  const [type,setType]=useState(initial?.type||"auto");
+  const [capital,setCapital]=useState(initial?.capital||"");
+  const [rate,setRate]=useState(initial?.rate||"");
+  const [duration,setDuration]=useState(initial?.duration||"");
+  const [startDate,setStartDate]=useState(initial?.startDate||new Date().toISOString().slice(0,10));
+  return <div>
+    <Field label="Libellé"><input style={S.input} value={label} onChange={e=>setLabel(e.target.value)} placeholder="Ex: Prêt Clio V"/></Field>
+    <Field label="Type"><select style={S.select} value={type} onChange={e=>setType(e.target.value)}><option value="auto">Prêt auto</option><option value="conso">Prêt consommation</option></select></Field>
+    <Field label="Capital emprunté (€)"><input style={S.input} type="number" inputMode="decimal" step="0.01" value={capital} onChange={e=>setCapital(e.target.value)}/></Field>
+    <Field label="Taux annuel (%)"><input style={S.input} type="number" inputMode="decimal" step="0.01" value={rate} onChange={e=>setRate(e.target.value)}/></Field>
+    <Field label="Durée (mois)"><input style={S.input} type="number" inputMode="numeric" value={duration} onChange={e=>setDuration(e.target.value)}/></Field>
+    <Field label="Date de début"><input style={S.input} type="date" value={startDate} onChange={e=>setStartDate(e.target.value)}/></Field>
+    <button onClick={()=>onSave({label,type,capital:Number(capital),rate:Number(rate),duration:Number(duration),startDate,account:"ca"})} style={{...S.btn("primary"),width:"100%",marginTop:8}} disabled={!label||!capital||!rate||!duration}>{initial?"Modifier":"Ajouter"}</button>
+  </div>;
+}
+
+// ========== SETTINGS ==========
+function SettingsPage({data,setData}) {
+  const [showCatModal,setShowCatModal]=useState(false);
+  const [editCat,setEditCat]=useState(null);
+  const [showReset,setShowReset]=useState(false);
+  const [newType,setNewType]=useState("variable");
+
+  function saveCat(item) {
+    const u={...data};
+    if(editCat) u.categories=u.categories.map(c=>c.id===editCat.id?{...editCat,...item}:c);
+    else u.categories=[...u.categories,{id:uid(),...item}];
+    setData(u); setShowCatModal(false); setEditCat(null);
+  }
+
+  const fixCats=data.categories.filter(c=>c.type==="fixe");
+  const varCats=data.categories.filter(c=>c.type==="variable");
+
+  return <div>
+    <div style={S.header}><div style={S.headerTitle}>Paramètres</div></div>
+    <div style={{padding:"16px 0"}}>
+      {[{title:"Catégories fixes",cats:fixCats,t:"fixe"},{title:"Catégories variables",cats:varCats,t:"variable"}].map(sec=>
+        <div key={sec.t} style={S.card}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+            <div style={S.cardTitle}>{sec.title}</div>
+            <button onClick={()=>{setEditCat(null);setNewType(sec.t);setShowCatModal(true);}} style={{...S.btn("sm"),padding:"4px 10px",fontSize:12,background:"none",border:"1px solid #e0dfdb",color:"#1a1a18"}}><Icon name="plus" size={14}/> Ajouter</button>
+          </div>
+          {sec.cats.map(c=><div key={c.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderBottom:"1px solid #f0efeb"}}>
+            <span style={{fontSize:14}}>{c.name}</span>
+            <div style={{display:"flex",gap:8}}>
+              <button onClick={()=>{setEditCat(c);setShowCatModal(true);}} style={{background:"none",border:"none",cursor:"pointer",color:"#a0a09a",padding:4}}><Icon name="edit" size={16}/></button>
+              <button onClick={()=>setData({...data,categories:data.categories.filter(x=>x.id!==c.id)})} style={{background:"none",border:"none",cursor:"pointer",color:"#E24B4A",padding:4}}><Icon name="trash" size={16}/></button>
+            </div>
+          </div>)}
+        </div>
+      )}
+      <div style={S.card}>
+        <div style={S.cardTitle}>Données</div>
+        <button onClick={()=>setShowReset(true)} style={{...S.btn("danger"),width:"100%",marginTop:4}}>Réinitialiser toutes les données</button>
+      </div>
+    </div>
+    <Modal open={showCatModal} onClose={()=>{setShowCatModal(false);setEditCat(null);}} title={editCat?"Modifier la catégorie":"Nouvelle catégorie"}>
+      <CatForm initial={editCat} defaultType={newType} onSave={saveCat}/>
+    </Modal>
+    <Modal open={showReset} onClose={()=>setShowReset(false)} title="Confirmer la réinitialisation">
+      <p style={{fontSize:14,color:"#555550",marginBottom:16}}>Toutes les données seront supprimées. Cette action est irréversible.</p>
+      <div style={{display:"flex",gap:10}}>
+        <button onClick={()=>setShowReset(false)} style={{...S.btn("ghost"),flex:1}}>Annuler</button>
+        <button onClick={()=>{setData(getDefaultData());setShowReset(false);}} style={{...S.btn("danger"),flex:1}}>Confirmer</button>
+      </div>
+    </Modal>
+  </div>;
+}
+
+function CatForm({initial,defaultType,onSave}) {
+  const [name,setName]=useState(initial?.name||"");
+  const [type,setType]=useState(initial?.type||defaultType||"variable");
+  return <div>
+    <Field label="Nom"><input style={S.input} value={name} onChange={e=>setName(e.target.value)} placeholder="Ex: Sport"/></Field>
+    <Field label="Type"><select style={S.select} value={type} onChange={e=>setType(e.target.value)}><option value="fixe">Fixe</option><option value="variable">Variable</option></select></Field>
+    <button onClick={()=>onSave({name,type})} style={{...S.btn("primary"),width:"100%",marginTop:8}} disabled={!name}>{initial?"Modifier":"Ajouter"}</button>
+  </div>;
+}
+
+// ========== APP ==========
+function App() {
+  const [page,setPage]=useState("dashboard");
+  const [data,setDataState]=useState(()=>loadData());
+  const monthKey=getCurrentMonthKey();
+  function setData(d) { setDataState(d); saveData(d); }
+
+  return <div style={S.app}>
+    {page==="dashboard"&&<Dashboard data={data} monthKey={monthKey}/>}
+    {page==="expenses"&&<ExpensesPage data={data} setData={setData} monthKey={monthKey}/>}
+    {page==="budgets"&&<BudgetPage data={data} setData={setData} monthKey={monthKey}/>}
+    {page==="loans"&&<LoansPage data={data} setData={setData}/>}
+    {page==="settings"&&<SettingsPage data={data} setData={setData}/>}
+    <nav style={S.nav}>
+      {[{id:"dashboard",icon:"dashboard",label:"Accueil"},{id:"expenses",icon:"expense",label:"Dépenses"},{id:"budgets",icon:"budget",label:"Budgets"},{id:"loans",icon:"loan",label:"Prêts"},{id:"settings",icon:"settings",label:"Réglages"}].map(item=>
+        <button key={item.id} onClick={()=>setPage(item.id)} style={S.navItem(page===item.id)}><Icon name={item.icon}/><span>{item.label}</span></button>
+      )}
+    </nav>
+  </div>;
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+
+<script>
+// Register Service Worker for offline PWA
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  });
+}
+</script>
+</body>
+</html>
