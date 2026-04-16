@@ -1,564 +1,623 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<meta name="theme-color" content="#F8F7F4">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="apple-mobile-web-app-title" content="Mon Budget">
-<link rel="manifest" href="manifest.json">
-<link rel="apple-touch-icon" href="icon-192.png">
-<title>Mon Budget</title>
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-<style>
-*{margin:0;padding:0;box-sizing:border-box}
-html,body,#root{height:100%;font-family:'DM Sans','Helvetica Neue',sans-serif;background:#F8F7F4;color:#1a1a18;-webkit-font-smoothing:antialiased}
-input,select,button,textarea{font-family:inherit}
-::-webkit-scrollbar{width:4px}
-::-webkit-scrollbar-thumb{background:#d0d0c8;border-radius:2px}
-</style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Trésorerie</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="apple-touch-icon" href="icon-192.png" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #f5f4f0;
+      --surface: #ffffff;
+      --surface2: #f0ede8;
+      --border: rgba(0,0,0,0.1);
+      --border2: rgba(0,0,0,0.18);
+      --text: #0d0d0d;
+      --text2: #555;
+      --text3: #999;
+      --ca: #378ADD;
+      --bo: #1D9E75;
+      --ce: #D85A30;
+      --red: #E24B4A;
+      --green: #1D9E75;
+      --amber: #BA7517;
+      --radius: 12px;
+      --radius-sm: 8px;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #111;
+        --surface: #1a1a1a;
+        --surface2: #232323;
+        --border: rgba(255,255,255,0.08);
+        --border2: rgba(255,255,255,0.15);
+        --text: #f0ede8;
+        --text2: #aaa;
+        --text3: #666;
+      }
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding-bottom: 80px;
+    }
+
+    nav {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      background: var(--surface);
+      border-top: 0.5px solid var(--border);
+      display: flex;
+      z-index: 100;
+    }
+    nav button {
+      flex: 1;
+      padding: 12px 4px 14px;
+      background: none;
+      border: none;
+      color: var(--text3);
+      font-size: 11px;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 3px;
+      transition: color 0.15s;
+    }
+    nav button.active { color: var(--text); }
+    nav button svg { width: 22px; height: 22px; }
+
+    .view { display: none; padding: 16px; }
+    .view.active { display: block; }
+
+    .page-header {
+      font-size: 22px;
+      font-weight: 600;
+      margin-bottom: 20px;
+      letter-spacing: -0.5px;
+    }
+
+    .card {
+      background: var(--surface);
+      border-radius: var(--radius);
+      border: 0.5px solid var(--border);
+      padding: 16px;
+      margin-bottom: 12px;
+    }
+
+    .section-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text3);
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      margin-bottom: 10px;
+    }
+
+    .bank-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0,1fr));
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+    .bank-card {
+      background: var(--surface);
+      border: 0.5px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px 12px;
+      cursor: pointer;
+      transition: border-color 0.15s, transform 0.1s;
+      position: relative;
+      overflow: hidden;
+    }
+    .bank-card:active { transform: scale(0.97); }
+    .bank-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 3px;
+    }
+    .bank-card.ca::before { background: var(--ca); }
+    .bank-card.bo::before { background: var(--bo); }
+    .bank-card.ce::before { background: var(--ce); }
+    .bank-card .bk-name { font-size: 10px; color: var(--text2); margin-bottom: 6px; font-weight: 500; }
+    .bank-card .bk-amount { font-size: 17px; font-weight: 600; }
+    .bank-card .bk-amount.neg { color: var(--red); }
+    .bank-card .bk-tap { font-size: 9px; color: var(--text3); margin-top: 4px; }
+
+    .total-strip {
+      background: var(--surface);
+      border: 0.5px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+    .total-strip .t-label { font-size: 13px; color: var(--text2); }
+    .total-strip .t-amount { font-size: 22px; font-weight: 600; }
+    .total-strip .t-amount.neg { color: var(--red); }
+
+    .alert {
+      font-size: 12px;
+      padding: 10px 14px;
+      border-radius: var(--radius-sm);
+      margin-bottom: 8px;
+      font-weight: 500;
+    }
+    .alert-warn { background: #FAEEDA; color: #633806; }
+    .alert-ok { background: #EAF3DE; color: #27500A; }
+    .alert-danger { background: #FCEBEB; color: #501313; }
+
+    .op-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 0;
+      border-bottom: 0.5px solid var(--border);
+    }
+    .op-row:last-child { border-bottom: none; }
+    .op-title { font-size: 14px; font-weight: 500; }
+    .op-sub { font-size: 11px; color: var(--text3); margin-top: 2px; }
+    .op-amount { font-size: 14px; font-weight: 600; }
+    .op-amount.neg { color: var(--red); }
+    .op-amount.pos { color: var(--green); }
+
+    .proj-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+      font-size: 13px;
+    }
+    .proj-label { min-width: 65px; color: var(--text2); text-transform: capitalize; }
+    .proj-track { flex: 1; height: 6px; background: var(--surface2); border-radius: 3px; overflow: hidden; }
+    .proj-fill { height: 100%; border-radius: 3px; }
+    .proj-val { min-width: 70px; text-align: right; font-weight: 600; font-size: 12px; }
+
+    .form-group { margin-bottom: 14px; }
+    .form-group label { font-size: 12px; color: var(--text2); display: block; margin-bottom: 6px; font-weight: 500; }
+    .form-group input, .form-group select {
+      width: 100%;
+      font-size: 15px;
+      padding: 11px 14px;
+      background: var(--surface2);
+      border: 0.5px solid var(--border2);
+      border-radius: var(--radius-sm);
+      color: var(--text);
+      font-family: inherit;
+    }
+    .form-group input:focus, .form-group select:focus {
+      outline: none;
+      border-color: var(--ca);
+    }
+
+    .btn {
+      width: 100%;
+      padding: 14px;
+      border-radius: var(--radius);
+      border: none;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: inherit;
+      background: var(--text);
+      color: var(--bg);
+      transition: opacity 0.15s;
+    }
+    .btn:active { opacity: 0.8; }
+    .btn-danger {
+      background: transparent;
+      border: 0.5px solid var(--red);
+      color: var(--red);
+      margin-top: 8px;
+    }
+    .btn-sm {
+      width: auto;
+      padding: 8px 16px;
+      font-size: 13px;
+    }
+
+    .quick-bar {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+    .quick-bar input {
+      flex: 1;
+      font-size: 14px;
+      padding: 11px 14px;
+      background: var(--surface);
+      border: 0.5px solid var(--border2);
+      border-radius: var(--radius);
+      color: var(--text);
+      font-family: inherit;
+    }
+    .quick-bar input:focus { outline: none; border-color: var(--ca); }
+    .quick-bar button {
+      padding: 11px 18px;
+      background: var(--text);
+      color: var(--bg);
+      border: none;
+      border-radius: var(--radius);
+      font-size: 16px;
+      cursor: pointer;
+    }
+
+    .back-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      color: var(--text2);
+      cursor: pointer;
+      margin-bottom: 16px;
+      background: none;
+      border: none;
+      font-family: inherit;
+      padding: 0;
+    }
+    .back-btn:hover { color: var(--text); }
+
+    .dot {
+      display: inline-block;
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      margin-right: 6px;
+    }
+
+    .chart-wrap {
+      position: relative;
+      height: 180px;
+      margin-bottom: 10px;
+    }
+
+    .setup-prompt {
+      background: var(--surface);
+      border: 1.5px dashed var(--border2);
+      border-radius: var(--radius);
+      padding: 28px 20px;
+      text-align: center;
+      margin-bottom: 16px;
+    }
+    .setup-prompt p { font-size: 14px; color: var(--text2); margin-bottom: 14px; }
+
+    .detail-header {
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    .detail-header .bank-name { font-size: 20px; font-weight: 600; }
+    .detail-header .bank-bal { font-size: 20px; font-weight: 600; }
+
+    .ops-scroll { max-height: 60vh; overflow-y: auto; }
+
+    input[type=number] { -moz-appearance: textfield; }
+    input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-appearance: none; }
+
+    .legend { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+    .legend-item { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--text2); }
+    .legend-dot { width: 8px; height: 8px; border-radius: 2px; }
+  </style>
 </head>
 <body>
-<div id="root"></div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+<div id="view-dashboard" class="view active"></div>
+<div id="view-add" class="view"></div>
+<div id="view-stats" class="view"></div>
+<div id="view-settings" class="view"></div>
 
-<script type="text/babel">
-const { useState, useEffect, useCallback, useMemo } = React;
-
-const STORAGE_KEY = "budget-app-data";
-
-const DEFAULT_CATEGORIES = {
-  fixes: [
-    { id: "cat-1", name: "Loyer/Logement", type: "fixe" },
-    { id: "cat-2", name: "Électricité", type: "fixe" },
-    { id: "cat-3", name: "Eau", type: "fixe" },
-    { id: "cat-4", name: "Internet/Téléphone", type: "fixe" },
-    { id: "cat-5", name: "Assurances", type: "fixe" },
-    { id: "cat-6", name: "Prêts", type: "fixe" },
-    { id: "cat-7", name: "Abonnements", type: "fixe" },
-  ],
-  variables: [
-    { id: "cat-8", name: "Alimentation", type: "variable" },
-    { id: "cat-9", name: "Transport/Carburant", type: "variable" },
-    { id: "cat-10", name: "Santé", type: "variable" },
-    { id: "cat-11", name: "Loisirs/Sorties", type: "variable" },
-    { id: "cat-12", name: "Vêtements", type: "variable" },
-    { id: "cat-13", name: "Enfant(s)", type: "variable" },
-    { id: "cat-14", name: "Épargne", type: "variable" },
-    { id: "cat-15", name: "Divers", type: "variable" },
-  ],
-};
-
-const ACCOUNTS = [
-  { id: "ca", name: "Crédit Agricole", color: "#1D9E75", short: "CA" },
-  { id: "bourso", name: "Boursorama", color: "#D85A30", short: "BR" },
-  { id: "ce", name: "Caisse d'Épargne", color: "#378ADD", short: "CE" },
-];
-
-const MONTHS_FR = ["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"];
-
-function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
-function fmt(n) { return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" }).format(n); }
-function getMonthKey(date) { const d = new Date(date); return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0"); }
-function getCurrentMonthKey() { const n = new Date(); return n.getFullYear() + "-" + String(n.getMonth()+1).padStart(2,"0"); }
-function parseMonthKey(key) { const [y,m] = key.split("-").map(Number); return {year:y,month:m}; }
-
-function getDefaultData() {
-  return { categories: [...DEFAULT_CATEGORIES.fixes, ...DEFAULT_CATEGORIES.variables], expenses: [], fixedExpenses: [], incomes: [], budgets: [], loans: [] };
-}
-function loadData() { try { const r = localStorage.getItem(STORAGE_KEY); if(r) return {...getDefaultData(),...JSON.parse(r)}; } catch{} return getDefaultData(); }
-function saveData(data) { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }
-
-function computeAmortization(capital, annualRate, durationMonths, startDate) {
-  const mr = annualRate / 100 / 12;
-  const mens = mr > 0 ? (capital * mr) / (1 - Math.pow(1 + mr, -durationMonths)) : capital / durationMonths;
-  const rows = []; let rem = capital; const start = new Date(startDate);
-  for (let i = 0; i < durationMonths; i++) {
-    const interest = rem * mr; const princ = mens - interest;
-    rem = Math.max(0, rem - princ);
-    const d = new Date(start); d.setMonth(d.getMonth() + i);
-    rows.push({ month:i+1, date:d.toISOString().slice(0,10), mensualite:Math.round(mens*100)/100, interest:Math.round(interest*100)/100, principal:Math.round(princ*100)/100, remaining:Math.round(rem*100)/100 });
-  }
-  return { mensualite: Math.round(mens*100)/100, rows };
-}
-
-// === SVG Icons ===
-function Icon({name, size=22}) {
-  const s = {width:size,height:size};
-  const p = {fill:"none",stroke:"currentColor",strokeWidth:1.8,strokeLinecap:"round",strokeLinejoin:"round"};
-  const icons = {
-    dashboard: <svg style={s} viewBox="0 0 24 24" {...p}><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/></svg>,
-    expense: <svg style={s} viewBox="0 0 24 24" {...p}><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>,
-    budget: <svg style={s} viewBox="0 0 24 24" {...p}><path d="M21 12a9 9 0 11-6.2-8.6"/><path d="M21 3v6h-6"/></svg>,
-    loan: <svg style={s} viewBox="0 0 24 24" {...p}><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>,
-    settings: <svg style={s} viewBox="0 0 24 24" {...p}><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>,
-    plus: <svg style={{width:18,height:18}} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>,
-    close: <svg style={{width:20,height:20}} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>,
-    trash: <svg style={{width:16,height:16}} viewBox="0 0 24 24" {...p}><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>,
-    edit: <svg style={{width:16,height:16}} viewBox="0 0 24 24" {...p}><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>,
-    chevDown: <svg style={{width:16,height:16}} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>,
-  };
-  return icons[name] || null;
-}
-
-// === Styles ===
-const S = {
-  app: { background:"#F8F7F4", minHeight:"100vh", maxWidth:480, margin:"0 auto", paddingBottom:80, color:"#1a1a18", position:"relative" },
-  header: { padding:"20px 20px 0", display:"flex", justifyContent:"space-between", alignItems:"center" },
-  headerTitle: { fontSize:22, fontWeight:700, letterSpacing:"-0.02em" },
-  headerSub: { fontSize:13, color:"#8a8a85", fontWeight:400, marginTop:2 },
-  nav: { position:"fixed", bottom:0, left:"50%", transform:"translateX(-50%)", width:"100%", maxWidth:480, background:"#FFFFFF", borderTop:"1px solid #e8e7e3", display:"flex", justifyContent:"space-around", padding:"6px 0 max(env(safe-area-inset-bottom),8px)", zIndex:100 },
-  navItem: (a) => ({ display:"flex", flexDirection:"column", alignItems:"center", gap:2, padding:"6px 12px", border:"none", background:"none", color:a?"#1D9E75":"#a0a09a", fontSize:10, fontWeight:a?600:400, cursor:"pointer" }),
-  card: { background:"#FFFFFF", borderRadius:16, padding:"16px 18px", margin:"0 16px 12px", boxShadow:"0 1px 3px rgba(0,0,0,0.04)", border:"1px solid #f0efeb" },
-  cardTitle: { fontSize:13, fontWeight:600, color:"#8a8a85", textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:10 },
-  bigNumber: { fontSize:28, fontWeight:700, letterSpacing:"-0.02em" },
-  accountBadge: (c) => ({ display:"inline-flex", alignItems:"center", gap:6, padding:"4px 10px", borderRadius:20, background:c+"12", color:c, fontSize:12, fontWeight:600 }),
-  btn: (v) => ({ display:"inline-flex", alignItems:"center", justifyContent:"center", gap:6, padding:v==="sm"?"8px 14px":"12px 20px", borderRadius:12, border:v==="ghost"?"1px solid #e0dfdb":"none", background:v==="primary"?"#1D9E75":v==="danger"?"#E24B4A":"transparent", color:v==="primary"||v==="danger"?"#fff":"#1a1a18", fontSize:v==="sm"?13:14, fontWeight:600, cursor:"pointer" }),
-  input: { width:"100%", padding:"12px 14px", borderRadius:10, border:"1.5px solid #e8e7e3", fontSize:15, fontFamily:"inherit", color:"#1a1a18", background:"#FAFAF8", outline:"none" },
-  label: { fontSize:13, fontWeight:600, color:"#555550", marginBottom:6, display:"block" },
-  formGroup: { marginBottom:16 },
-  select: { width:"100%", padding:"12px 14px", borderRadius:10, border:"1.5px solid #e8e7e3", fontSize:15, fontFamily:"inherit", color:"#1a1a18", background:"#FAFAF8", outline:"none", WebkitAppearance:"none" },
-  modal: { position:"fixed", inset:0, background:"rgba(0,0,0,0.3)", backdropFilter:"blur(4px)", WebkitBackdropFilter:"blur(4px)", display:"flex", alignItems:"flex-end", justifyContent:"center", zIndex:200 },
-  modalContent: { background:"#FFFFFF", borderRadius:"20px 20px 0 0", padding:"24px 20px 32px", width:"100%", maxWidth:480, maxHeight:"85vh", overflowY:"auto" },
-  modalHeader: { display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 },
-  modalTitle: { fontSize:18, fontWeight:700 },
-  fab: { position:"fixed", bottom:76, right:"calc(50% - 210px)", width:52, height:52, borderRadius:16, background:"#1D9E75", color:"#fff", border:"none", display:"flex", alignItems:"center", justifyContent:"center", boxShadow:"0 4px 16px rgba(29,158,117,0.35)", cursor:"pointer", zIndex:90 },
-  tag: (c) => ({ display:"inline-block", padding:"3px 8px", borderRadius:6, background:(c||"#8a8a85")+"18", color:c||"#555550", fontSize:11, fontWeight:600 }),
-  emptyState: { textAlign:"center", padding:"40px 20px", color:"#a0a09a", fontSize:14 },
-};
-
-function Modal({open,onClose,title,children}) {
-  if(!open) return null;
-  return <div style={S.modal} onClick={e=>e.target===e.currentTarget&&onClose()}>
-    <div style={S.modalContent}>
-      <div style={S.modalHeader}><span style={S.modalTitle}>{title}</span><button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"#8a8a85"}}><Icon name="close"/></button></div>
-      {children}
-    </div>
-  </div>;
-}
-
-function Field({label,children}) { return <div style={S.formGroup}><label style={S.label}>{label}</label>{children}</div>; }
-
-function ProgressBar({pct,color}) {
-  return <div style={{height:6,borderRadius:3,background:"#eeeee8",overflow:"hidden"}}>
-    <div style={{height:"100%",borderRadius:3,width:Math.min(pct,100)+"%",background:pct>100?"#E24B4A":color||"#1D9E75",transition:"width 0.4s ease"}}/>
-  </div>;
-}
-
-// ========== DASHBOARD ==========
-function Dashboard({data,monthKey}) {
-  const {year,month} = parseMonthKey(monthKey);
-  const mExp = data.expenses.filter(e=>getMonthKey(e.date)===monthKey);
-  const mFix = data.fixedExpenses.filter(f=>{
-    if(f.frequency==="mensuelle") return true;
-    if(f.frequency==="annuelle"){ return new Date(f.date).getMonth()+1===month; }
-    return false;
-  });
-  const mInc = data.incomes.filter(i=>getMonthKey(i.date)===monthKey);
-  const totInc = mInc.reduce((s,i)=>s+Number(i.amount),0);
-  const totExp = mExp.reduce((s,e)=>s+Number(e.amount),0);
-  const totFix = mFix.reduce((s,f)=>s+Number(f.amount),0);
-  const totAll = totExp+totFix;
-  const balance = totInc-totAll;
-
-  const byAcc = ACCOUNTS.map(acc=>{
-    const inc = mInc.filter(i=>i.account===acc.id).reduce((s,i)=>s+Number(i.amount),0);
-    const exp = mExp.filter(e=>e.account===acc.id).reduce((s,e)=>s+Number(e.amount),0);
-    const fix = mFix.filter(f=>f.account===acc.id).reduce((s,f)=>s+Number(f.amount),0);
-    return {...acc,income:inc,expenses:exp+fix,balance:inc-exp-fix};
-  });
-
-  const topCats = {};
-  mExp.forEach(e=>{ topCats[e.category]=(topCats[e.category]||0)+Number(e.amount); });
-  const topList = Object.entries(topCats).sort((a,b)=>b[1]-a[1]).slice(0,5).map(([cid,amt])=>({ name:data.categories.find(c=>c.id===cid)?.name||cid, amount:amt }));
-
-  return <div>
-    <div style={S.header}><div><div style={S.headerTitle}>Tableau de bord</div><div style={S.headerSub}>{MONTHS_FR[month-1]} {year}</div></div></div>
-    <div style={{padding:"16px 0 0"}}>
-      <div style={{...S.card,background:balance>=0?"linear-gradient(135deg,#1D9E75 0%,#15785A 100%)":"linear-gradient(135deg,#E24B4A 0%,#c23130 100%)",color:"#fff",border:"none"}}>
-        <div style={{fontSize:12,fontWeight:500,opacity:0.8,textTransform:"uppercase",letterSpacing:"0.06em"}}>Solde du mois</div>
-        <div style={{...S.bigNumber,color:"#fff",marginTop:4}}>{fmt(balance)}</div>
-        <div style={{display:"flex",justifyContent:"space-between",marginTop:14,fontSize:13,opacity:0.85}}>
-          <span>Revenus : {fmt(totInc)}</span><span>Dépenses : {fmt(totAll)}</span>
-        </div>
-      </div>
-      <div style={{display:"flex",gap:8,padding:"0 16px",marginBottom:12,overflowX:"auto"}}>
-        {byAcc.map(acc=><div key={acc.id} style={{...S.card,margin:0,minWidth:135,flex:"1 0 auto",padding:"12px 14px"}}>
-          <div style={S.accountBadge(acc.color)}><span style={{width:8,height:8,borderRadius:4,background:acc.color}}/>{acc.short}</div>
-          <div style={{fontSize:18,fontWeight:700,marginTop:8}}>{fmt(acc.balance)}</div>
-          <div style={{fontSize:11,color:"#8a8a85",marginTop:2}}>+{fmt(acc.income)} / -{fmt(acc.expenses)}</div>
-        </div>)}
-      </div>
-      <div style={S.card}>
-        <div style={S.cardTitle}>Top catégories</div>
-        {topList.length===0&&<div style={{color:"#a0a09a",fontSize:13}}>Aucune dépense ce mois</div>}
-        {topList.map((c,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:i<topList.length-1?"1px solid #f0efeb":"none"}}>
-          <span style={{fontSize:14}}>{c.name}</span><span style={{fontSize:14,fontWeight:600}}>{fmt(c.amount)}</span>
-        </div>)}
-      </div>
-      <div style={S.card}>
-        <div style={S.cardTitle}>Charges fixes du mois</div>
-        <div style={{...S.bigNumber,fontSize:22}}>{fmt(totFix)}</div>
-        <div style={{fontSize:12,color:"#8a8a85",marginTop:4}}>{mFix.length} prélèvement(s)</div>
-      </div>
-    </div>
-  </div>;
-}
-
-// ========== EXPENSES ==========
-function ExpensesPage({data,setData,monthKey}) {
-  const [tab,setTab] = useState("ponctuelle");
-  const [showModal,setShowModal] = useState(false);
-  const [editItem,setEditItem] = useState(null);
-  const [showIncModal,setShowIncModal] = useState(false);
-  const {month} = parseMonthKey(monthKey);
-
-  const mExp = data.expenses.filter(e=>getMonthKey(e.date)===monthKey);
-  const mFix = data.fixedExpenses.filter(f=>{ if(f.frequency==="mensuelle") return true; if(f.frequency==="annuelle") return new Date(f.date).getMonth()+1===month; return false; });
-  const mInc = data.incomes.filter(i=>getMonthKey(i.date)===monthKey);
-
-  function saveExp(item) {
-    const u={...data};
-    if(tab==="ponctuelle"){ if(editItem) u.expenses=u.expenses.map(e=>e.id===editItem.id?{...editItem,...item}:e); else u.expenses=[...u.expenses,{id:uid(),...item}]; }
-    else { if(editItem) u.fixedExpenses=u.fixedExpenses.map(e=>e.id===editItem.id?{...editItem,...item}:e); else u.fixedExpenses=[...u.fixedExpenses,{id:uid(),...item}]; }
-    setData(u); setShowModal(false); setEditItem(null);
-  }
-  function saveInc(item) {
-    const u={...data};
-    if(editItem) u.incomes=u.incomes.map(i=>i.id===editItem.id?{...editItem,...item}:i); else u.incomes=[...u.incomes,{id:uid(),...item}];
-    setData(u); setShowIncModal(false); setEditItem(null);
-  }
-  function delExp(id) { const u={...data}; if(tab==="ponctuelle") u.expenses=u.expenses.filter(e=>e.id!==id); else u.fixedExpenses=u.fixedExpenses.filter(e=>e.id!==id); setData(u); }
-  function delInc(id) { setData({...data,incomes:data.incomes.filter(i=>i.id!==id)}); }
-
-  const items = tab==="ponctuelle"?mExp:tab==="fixe"?mFix:mInc;
-
-  return <div>
-    <div style={S.header}><div><div style={S.headerTitle}>Dépenses & Revenus</div><div style={S.headerSub}>{MONTHS_FR[parseMonthKey(monthKey).month-1]} {parseMonthKey(monthKey).year}</div></div></div>
-    <div style={{display:"flex",gap:6,padding:"16px 16px 8px",overflowX:"auto"}}>
-      {[{k:"ponctuelle",l:"Ponctuelles"},{k:"fixe",l:"Fixes"},{k:"revenu",l:"Revenus"}].map(t=>
-        <button key={t.k} onClick={()=>setTab(t.k)} style={{padding:"8px 16px",borderRadius:20,border:"none",background:tab===t.k?"#1a1a18":"#eeeee8",color:tab===t.k?"#fff":"#555550",fontSize:13,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap"}}>{t.l}</button>
-      )}
-    </div>
-    <div style={{padding:"8px 0"}}>
-      {items.length===0&&<div style={S.emptyState}>Aucun élément pour ce mois</div>}
-      {items.map(item=>{
-        const acc=ACCOUNTS.find(a=>a.id===item.account);
-        const cat=data.categories.find(c=>c.id===item.category);
-        return <div key={item.id} style={{...S.card,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-          <div style={{flex:1,minWidth:0}}>
-            <div style={{fontSize:15,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.label}</div>
-            <div style={{display:"flex",gap:6,marginTop:4,flexWrap:"wrap"}}>
-              {cat&&<span style={S.tag()}>{cat.name}</span>}
-              {acc&&<span style={S.tag(acc.color)}>{acc.short}</span>}
-              {item.frequency&&<span style={S.tag("#378ADD")}>{item.frequency}</span>}
-              <span style={{fontSize:11,color:"#a0a09a"}}>{item.date?new Date(item.date).toLocaleDateString("fr-FR"):"Jour "+(item.dayOfMonth||"?")}</span>
-            </div>
-          </div>
-          <div style={{textAlign:"right",display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
-            <span style={{fontSize:15,fontWeight:700,color:tab==="revenu"?"#1D9E75":"#E24B4A"}}>{tab==="revenu"?"+":"-"}{fmt(item.amount)}</span>
-            <button onClick={()=>{setEditItem(item);tab==="revenu"?setShowIncModal(true):setShowModal(true);}} style={{background:"none",border:"none",cursor:"pointer",color:"#a0a09a",padding:4}}><Icon name="edit" size={16}/></button>
-            <button onClick={()=>tab==="revenu"?delInc(item.id):delExp(item.id)} style={{background:"none",border:"none",cursor:"pointer",color:"#E24B4A",padding:4}}><Icon name="trash" size={16}/></button>
-          </div>
-        </div>;
-      })}
-    </div>
-    <button onClick={()=>{setEditItem(null);tab==="revenu"?setShowIncModal(true):setShowModal(true);}} style={S.fab}><Icon name="plus"/></button>
-    <Modal open={showModal} onClose={()=>{setShowModal(false);setEditItem(null);}} title={tab==="ponctuelle"?"Dépense ponctuelle":"Dépense fixe"}>
-      <ExpenseForm tab={tab} categories={data.categories} initial={editItem} onSave={saveExp}/>
-    </Modal>
-    <Modal open={showIncModal} onClose={()=>{setShowIncModal(false);setEditItem(null);}} title="Revenu">
-      <IncomeForm initial={editItem} onSave={saveInc}/>
-    </Modal>
-  </div>;
-}
-
-function ExpenseForm({tab,categories,initial,onSave}) {
-  const [label,setLabel]=useState(initial?.label||"");
-  const [amount,setAmount]=useState(initial?.amount||"");
-  const [date,setDate]=useState(initial?.date||new Date().toISOString().slice(0,10));
-  const [category,setCategory]=useState(initial?.category||categories[0]?.id||"");
-  const [account,setAccount]=useState(initial?.account||ACCOUNTS[0].id);
-  const [frequency,setFrequency]=useState(initial?.frequency||"mensuelle");
-  const [dayOfMonth,setDayOfMonth]=useState(initial?.dayOfMonth||"1");
-  return <div>
-    <Field label="Libellé"><input style={S.input} value={label} onChange={e=>setLabel(e.target.value)} placeholder="Ex: Courses Carrefour"/></Field>
-    <Field label="Montant (€)"><input style={S.input} type="number" inputMode="decimal" step="0.01" value={amount} onChange={e=>setAmount(e.target.value)}/></Field>
-    {tab==="ponctuelle"?
-      <Field label="Date"><input style={S.input} type="date" value={date} onChange={e=>setDate(e.target.value)}/></Field>
-    :<>
-      <Field label="Fréquence"><select style={S.select} value={frequency} onChange={e=>setFrequency(e.target.value)}><option value="mensuelle">Mensuelle</option><option value="annuelle">Annuelle</option></select></Field>
-      <Field label={frequency==="annuelle"?"Date de prélèvement":"Jour de prélèvement"}>
-        {frequency==="annuelle"?<input style={S.input} type="date" value={date} onChange={e=>setDate(e.target.value)}/>
-        :<input style={S.input} type="number" inputMode="numeric" min="1" max="31" value={dayOfMonth} onChange={e=>setDayOfMonth(e.target.value)}/>}
-      </Field>
-    </>}
-    <Field label="Catégorie"><select style={S.select} value={category} onChange={e=>setCategory(e.target.value)}>{categories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></Field>
-    <Field label="Compte"><select style={S.select} value={account} onChange={e=>setAccount(e.target.value)}>{ACCOUNTS.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></Field>
-    <button onClick={()=>onSave({label,amount:Number(amount),date,category,account,frequency:tab==="fixe"?frequency:undefined,dayOfMonth:tab==="fixe"&&frequency==="mensuelle"?dayOfMonth:undefined})} style={{...S.btn("primary"),width:"100%",marginTop:8}} disabled={!label||!amount}>{initial?"Modifier":"Ajouter"}</button>
-  </div>;
-}
-
-function IncomeForm({initial,onSave}) {
-  const [label,setLabel]=useState(initial?.label||"");
-  const [amount,setAmount]=useState(initial?.amount||"");
-  const [date,setDate]=useState(initial?.date||new Date().toISOString().slice(0,10));
-  const [account,setAccount]=useState(initial?.account||ACCOUNTS[0].id);
-  return <div>
-    <Field label="Libellé"><input style={S.input} value={label} onChange={e=>setLabel(e.target.value)} placeholder="Ex: Salaire"/></Field>
-    <Field label="Montant (€)"><input style={S.input} type="number" inputMode="decimal" step="0.01" value={amount} onChange={e=>setAmount(e.target.value)}/></Field>
-    <Field label="Date"><input style={S.input} type="date" value={date} onChange={e=>setDate(e.target.value)}/></Field>
-    <Field label="Compte"><select style={S.select} value={account} onChange={e=>setAccount(e.target.value)}>{ACCOUNTS.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></Field>
-    <button onClick={()=>onSave({label,amount:Number(amount),date,account})} style={{...S.btn("primary"),width:"100%",marginTop:8}} disabled={!label||!amount}>{initial?"Modifier":"Ajouter"}</button>
-  </div>;
-}
-
-// ========== BUDGETS ==========
-function BudgetPage({data,setData,monthKey}) {
-  const [showModal,setShowModal]=useState(false);
-  const [editItem,setEditItem]=useState(null);
-  const mExp = data.expenses.filter(e=>getMonthKey(e.date)===monthKey);
-
-  function saveBudget(item) {
-    const u={...data};
-    if(editItem) u.budgets=u.budgets.map(b=>b.id===editItem.id?{...editItem,...item}:b);
-    else u.budgets=[...u.budgets,{id:uid(),...item}];
-    setData(u); setShowModal(false); setEditItem(null);
-  }
-
-  return <div>
-    <div style={S.header}><div><div style={S.headerTitle}>Budgets</div><div style={S.headerSub}>Plafonds par catégorie</div></div></div>
-    <div style={{padding:"16px 0"}}>
-      {data.budgets.length===0&&<div style={S.emptyState}>Aucun budget défini<br/><span style={{fontSize:12}}>Ajoutez un plafond par catégorie</span></div>}
-      {data.budgets.map(budget=>{
-        const cat=data.categories.find(c=>c.id===budget.category);
-        const spent=mExp.filter(e=>e.category===budget.category).reduce((s,e)=>s+Number(e.amount),0);
-        const pct=budget.limit>0?(spent/budget.limit)*100:0;
-        const rem=budget.limit-spent;
-        return <div key={budget.id} style={S.card}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-            <span style={{fontSize:15,fontWeight:600}}>{cat?.name||"?"}</span>
-            <div style={{display:"flex",gap:6}}>
-              <button onClick={()=>{setEditItem(budget);setShowModal(true);}} style={{background:"none",border:"none",cursor:"pointer",color:"#a0a09a",padding:4}}><Icon name="edit" size={16}/></button>
-              <button onClick={()=>setData({...data,budgets:data.budgets.filter(b=>b.id!==budget.id)})} style={{background:"none",border:"none",cursor:"pointer",color:"#E24B4A",padding:4}}><Icon name="trash" size={16}/></button>
-            </div>
-          </div>
-          <div style={{display:"flex",justifyContent:"space-between",fontSize:13,marginBottom:6}}>
-            <span style={{color:"#8a8a85"}}>Dépensé : {fmt(spent)}</span><span style={{fontWeight:600}}>/ {fmt(budget.limit)}</span>
-          </div>
-          <ProgressBar pct={pct}/>
-          <div style={{fontSize:13,fontWeight:600,marginTop:6,color:rem>=0?"#1D9E75":"#E24B4A"}}>{rem>=0?"Reste "+fmt(rem):"Dépassement de "+fmt(-rem)}</div>
-        </div>;
-      })}
-    </div>
-    <button onClick={()=>{setEditItem(null);setShowModal(true);}} style={S.fab}><Icon name="plus"/></button>
-    <Modal open={showModal} onClose={()=>{setShowModal(false);setEditItem(null);}} title="Définir un budget">
-      <BudgetForm categories={data.categories} initial={editItem} onSave={saveBudget} existing={data.budgets}/>
-    </Modal>
-  </div>;
-}
-
-function BudgetForm({categories,initial,onSave,existing}) {
-  const [category,setCategory]=useState(initial?.category||categories[0]?.id||"");
-  const [limit,setLimit]=useState(initial?.limit||"");
-  const avail=categories.filter(c=>!existing.find(b=>b.category===c.id)||c.id===initial?.category);
-  return <div>
-    <Field label="Catégorie"><select style={S.select} value={category} onChange={e=>setCategory(e.target.value)}>{avail.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></Field>
-    <Field label="Plafond mensuel (€)"><input style={S.input} type="number" inputMode="decimal" step="0.01" value={limit} onChange={e=>setLimit(e.target.value)}/></Field>
-    <button onClick={()=>onSave({category,limit:Number(limit)})} style={{...S.btn("primary"),width:"100%",marginTop:8}} disabled={!limit}>{initial?"Modifier":"Ajouter"}</button>
-  </div>;
-}
-
-// ========== LOANS ==========
-function LoansPage({data,setData}) {
-  const [showModal,setShowModal]=useState(false);
-  const [editItem,setEditItem]=useState(null);
-  const [expanded,setExpanded]=useState(null);
-
-  function saveLoan(item) {
-    const u={...data};
-    if(editItem) u.loans=u.loans.map(l=>l.id===editItem.id?{...editItem,...item}:l);
-    else u.loans=[...u.loans,{id:uid(),...item}];
-    setData(u); setShowModal(false); setEditItem(null);
-  }
-
-  return <div>
-    <div style={S.header}><div><div style={S.headerTitle}>Prêts</div><div style={S.headerSub}>Suivi & amortissement</div></div></div>
-    <div style={{padding:"16px 0"}}>
-      {data.loans.length===0&&<div style={S.emptyState}>Aucun prêt enregistré</div>}
-      {data.loans.map(loan=>{
-        const amort=computeAmortization(loan.capital,loan.rate,loan.duration,loan.startDate);
-        const today=new Date();
-        const paidRows=amort.rows.filter(r=>new Date(r.date)<=today);
-        const rem=paidRows.length>0?paidRows[paidRows.length-1].remaining:loan.capital;
-        const pct=((loan.capital-rem)/loan.capital)*100;
-        const totInt=amort.rows.reduce((s,r)=>s+r.interest,0);
-        const isExp=expanded===loan.id;
-        return <div key={loan.id} style={S.card}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-            <div><div style={{fontSize:16,fontWeight:700}}>{loan.label}</div><span style={S.tag(loan.type==="auto"?"#378ADD":"#D85A30")}>{loan.type==="auto"?"Auto":"Consommation"}</span></div>
-            <div style={{display:"flex",gap:6}}>
-              <button onClick={()=>{setEditItem(loan);setShowModal(true);}} style={{background:"none",border:"none",cursor:"pointer",color:"#a0a09a",padding:4}}><Icon name="edit" size={16}/></button>
-              <button onClick={()=>setData({...data,loans:data.loans.filter(l=>l.id!==loan.id)})} style={{background:"none",border:"none",cursor:"pointer",color:"#E24B4A",padding:4}}><Icon name="trash" size={16}/></button>
-            </div>
-          </div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginTop:14}}>
-            <div><div style={{fontSize:11,color:"#8a8a85",textTransform:"uppercase",letterSpacing:"0.04em"}}>Mensualité</div><div style={{fontSize:18,fontWeight:700}}>{fmt(amort.mensualite)}</div></div>
-            <div><div style={{fontSize:11,color:"#8a8a85",textTransform:"uppercase",letterSpacing:"0.04em"}}>Restant dû</div><div style={{fontSize:18,fontWeight:700,color:"#E24B4A"}}>{fmt(rem)}</div></div>
-            <div><div style={{fontSize:11,color:"#8a8a85",textTransform:"uppercase",letterSpacing:"0.04em"}}>Progression</div><div style={{fontSize:14,fontWeight:600}}>{paidRows.length}/{loan.duration} mois</div></div>
-            <div><div style={{fontSize:11,color:"#8a8a85",textTransform:"uppercase",letterSpacing:"0.04em"}}>Coût intérêts</div><div style={{fontSize:14,fontWeight:600,color:"#D85A30"}}>{fmt(totInt)}</div></div>
-          </div>
-          <div style={{marginTop:12}}><ProgressBar pct={pct} color="#1D9E75"/><div style={{fontSize:11,color:"#8a8a85",marginTop:4,textAlign:"right"}}>{Math.round(pct)}% remboursé</div></div>
-          <button onClick={()=>setExpanded(isExp?null:loan.id)} style={{...S.btn("ghost"),width:"100%",marginTop:10,fontSize:13}}>
-            {isExp?"Masquer":"Tableau d'amortissement"} <Icon name="chevDown" size={14}/>
-          </button>
-          {isExp&&<div style={{marginTop:12,maxHeight:300,overflowY:"auto",fontSize:12,WebkitOverflowScrolling:"touch"}}>
-            <table style={{width:"100%",borderCollapse:"collapse"}}>
-              <thead><tr style={{borderBottom:"2px solid #eeeee8",textAlign:"left"}}>
-                <th style={{padding:"6px 4px",color:"#8a8a85",fontWeight:600}}>N°</th>
-                <th style={{padding:"6px 4px",color:"#8a8a85",fontWeight:600}}>Date</th>
-                <th style={{padding:"6px 4px",color:"#8a8a85",fontWeight:600,textAlign:"right"}}>Capital</th>
-                <th style={{padding:"6px 4px",color:"#8a8a85",fontWeight:600,textAlign:"right"}}>Intérêts</th>
-                <th style={{padding:"6px 4px",color:"#8a8a85",fontWeight:600,textAlign:"right"}}>Restant</th>
-              </tr></thead>
-              <tbody>{amort.rows.map(row=>{
-                const isPast=new Date(row.date)<=today;
-                return <tr key={row.month} style={{borderBottom:"1px solid #f5f4f0",background:isPast?"#f0faf6":"transparent"}}>
-                  <td style={{padding:"5px 4px"}}>{row.month}</td>
-                  <td style={{padding:"5px 4px"}}>{new Date(row.date).toLocaleDateString("fr-FR",{month:"short",year:"2-digit"})}</td>
-                  <td style={{padding:"5px 4px",textAlign:"right"}}>{fmt(row.principal)}</td>
-                  <td style={{padding:"5px 4px",textAlign:"right",color:"#D85A30"}}>{fmt(row.interest)}</td>
-                  <td style={{padding:"5px 4px",textAlign:"right",fontWeight:600}}>{fmt(row.remaining)}</td>
-                </tr>;
-              })}</tbody>
-            </table>
-          </div>}
-        </div>;
-      })}
-    </div>
-    <button onClick={()=>{setEditItem(null);setShowModal(true);}} style={S.fab}><Icon name="plus"/></button>
-    <Modal open={showModal} onClose={()=>{setShowModal(false);setEditItem(null);}} title="Ajouter un prêt">
-      <LoanForm initial={editItem} onSave={saveLoan}/>
-    </Modal>
-  </div>;
-}
-
-function LoanForm({initial,onSave}) {
-  const [label,setLabel]=useState(initial?.label||"");
-  const [type,setType]=useState(initial?.type||"auto");
-  const [capital,setCapital]=useState(initial?.capital||"");
-  const [rate,setRate]=useState(initial?.rate||"");
-  const [duration,setDuration]=useState(initial?.duration||"");
-  const [startDate,setStartDate]=useState(initial?.startDate||new Date().toISOString().slice(0,10));
-  return <div>
-    <Field label="Libellé"><input style={S.input} value={label} onChange={e=>setLabel(e.target.value)} placeholder="Ex: Prêt Clio V"/></Field>
-    <Field label="Type"><select style={S.select} value={type} onChange={e=>setType(e.target.value)}><option value="auto">Prêt auto</option><option value="conso">Prêt consommation</option></select></Field>
-    <Field label="Capital emprunté (€)"><input style={S.input} type="number" inputMode="decimal" step="0.01" value={capital} onChange={e=>setCapital(e.target.value)}/></Field>
-    <Field label="Taux annuel (%)"><input style={S.input} type="number" inputMode="decimal" step="0.01" value={rate} onChange={e=>setRate(e.target.value)}/></Field>
-    <Field label="Durée (mois)"><input style={S.input} type="number" inputMode="numeric" value={duration} onChange={e=>setDuration(e.target.value)}/></Field>
-    <Field label="Date de début"><input style={S.input} type="date" value={startDate} onChange={e=>setStartDate(e.target.value)}/></Field>
-    <button onClick={()=>onSave({label,type,capital:Number(capital),rate:Number(rate),duration:Number(duration),startDate,account:"ca"})} style={{...S.btn("primary"),width:"100%",marginTop:8}} disabled={!label||!capital||!rate||!duration}>{initial?"Modifier":"Ajouter"}</button>
-  </div>;
-}
-
-// ========== SETTINGS ==========
-function SettingsPage({data,setData}) {
-  const [showCatModal,setShowCatModal]=useState(false);
-  const [editCat,setEditCat]=useState(null);
-  const [showReset,setShowReset]=useState(false);
-  const [newType,setNewType]=useState("variable");
-
-  function saveCat(item) {
-    const u={...data};
-    if(editCat) u.categories=u.categories.map(c=>c.id===editCat.id?{...editCat,...item}:c);
-    else u.categories=[...u.categories,{id:uid(),...item}];
-    setData(u); setShowCatModal(false); setEditCat(null);
-  }
-
-  const fixCats=data.categories.filter(c=>c.type==="fixe");
-  const varCats=data.categories.filter(c=>c.type==="variable");
-
-  return <div>
-    <div style={S.header}><div style={S.headerTitle}>Paramètres</div></div>
-    <div style={{padding:"16px 0"}}>
-      {[{title:"Catégories fixes",cats:fixCats,t:"fixe"},{title:"Catégories variables",cats:varCats,t:"variable"}].map(sec=>
-        <div key={sec.t} style={S.card}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-            <div style={S.cardTitle}>{sec.title}</div>
-            <button onClick={()=>{setEditCat(null);setNewType(sec.t);setShowCatModal(true);}} style={{...S.btn("sm"),padding:"4px 10px",fontSize:12,background:"none",border:"1px solid #e0dfdb",color:"#1a1a18"}}><Icon name="plus" size={14}/> Ajouter</button>
-          </div>
-          {sec.cats.map(c=><div key={c.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderBottom:"1px solid #f0efeb"}}>
-            <span style={{fontSize:14}}>{c.name}</span>
-            <div style={{display:"flex",gap:8}}>
-              <button onClick={()=>{setEditCat(c);setShowCatModal(true);}} style={{background:"none",border:"none",cursor:"pointer",color:"#a0a09a",padding:4}}><Icon name="edit" size={16}/></button>
-              <button onClick={()=>setData({...data,categories:data.categories.filter(x=>x.id!==c.id)})} style={{background:"none",border:"none",cursor:"pointer",color:"#E24B4A",padding:4}}><Icon name="trash" size={16}/></button>
-            </div>
-          </div>)}
-        </div>
-      )}
-      <div style={S.card}>
-        <div style={S.cardTitle}>Données</div>
-        <button onClick={()=>setShowReset(true)} style={{...S.btn("danger"),width:"100%",marginTop:4}}>Réinitialiser toutes les données</button>
-      </div>
-    </div>
-    <Modal open={showCatModal} onClose={()=>{setShowCatModal(false);setEditCat(null);}} title={editCat?"Modifier la catégorie":"Nouvelle catégorie"}>
-      <CatForm initial={editCat} defaultType={newType} onSave={saveCat}/>
-    </Modal>
-    <Modal open={showReset} onClose={()=>setShowReset(false)} title="Confirmer la réinitialisation">
-      <p style={{fontSize:14,color:"#555550",marginBottom:16}}>Toutes les données seront supprimées. Cette action est irréversible.</p>
-      <div style={{display:"flex",gap:10}}>
-        <button onClick={()=>setShowReset(false)} style={{...S.btn("ghost"),flex:1}}>Annuler</button>
-        <button onClick={()=>{setData(getDefaultData());setShowReset(false);}} style={{...S.btn("danger"),flex:1}}>Confirmer</button>
-      </div>
-    </Modal>
-  </div>;
-}
-
-function CatForm({initial,defaultType,onSave}) {
-  const [name,setName]=useState(initial?.name||"");
-  const [type,setType]=useState(initial?.type||defaultType||"variable");
-  return <div>
-    <Field label="Nom"><input style={S.input} value={name} onChange={e=>setName(e.target.value)} placeholder="Ex: Sport"/></Field>
-    <Field label="Type"><select style={S.select} value={type} onChange={e=>setType(e.target.value)}><option value="fixe">Fixe</option><option value="variable">Variable</option></select></Field>
-    <button onClick={()=>onSave({name,type})} style={{...S.btn("primary"),width:"100%",marginTop:8}} disabled={!name}>{initial?"Modifier":"Ajouter"}</button>
-  </div>;
-}
-
-// ========== APP ==========
-function App() {
-  const [page,setPage]=useState("dashboard");
-  const [data,setDataState]=useState(()=>loadData());
-  const monthKey=getCurrentMonthKey();
-  function setData(d) { setDataState(d); saveData(d); }
-
-  return <div style={S.app}>
-    {page==="dashboard"&&<Dashboard data={data} monthKey={monthKey}/>}
-    {page==="expenses"&&<ExpensesPage data={data} setData={setData} monthKey={monthKey}/>}
-    {page==="budgets"&&<BudgetPage data={data} setData={setData} monthKey={monthKey}/>}
-    {page==="loans"&&<LoansPage data={data} setData={setData}/>}
-    {page==="settings"&&<SettingsPage data={data} setData={setData}/>}
-    <nav style={S.nav}>
-      {[{id:"dashboard",icon:"dashboard",label:"Accueil"},{id:"expenses",icon:"expense",label:"Dépenses"},{id:"budgets",icon:"budget",label:"Budgets"},{id:"loans",icon:"loan",label:"Prêts"},{id:"settings",icon:"settings",label:"Réglages"}].map(item=>
-        <button key={item.id} onClick={()=>setPage(item.id)} style={S.navItem(page===item.id)}><Icon name={item.icon}/><span>{item.label}</span></button>
-      )}
-    </nav>
-  </div>;
-}
-
-ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
-</script>
+<nav>
+  <button class="active" onclick="showView('dashboard')" id="nav-dashboard">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+    Tableau de bord
+  </button>
+  <button onclick="showView('add')" id="nav-add">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+    Dépense
+  </button>
+  <button onclick="showView('stats')" id="nav-stats">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+    Stats
+  </button>
+  <button onclick="showView('settings')" id="nav-settings">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    Réglages
+  </button>
+</nav>
 
 <script>
-// Register Service Worker for offline PWA
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js').catch(() => {});
+const BANKS = { CA: 'Crédit Agricole', BO: 'Boursorama', CE: 'Caisse d\'Épargne' };
+const BANK_COLORS = { CA: '#378ADD', BO: '#1D9E75', CE: '#D85A30' };
+const CATS = ['Courses/Alimentation','Restaurants/Cafés','Abonnements','Shopping/Vêtements','Loisirs/Sorties','Santé','Transport/Carburant','Autre'];
+const CAT_COLORS = ['#378ADD','#1D9E75','#D85A30','#7F77DD','#D4537E','#BA7517','#888780','#E24B4A'];
+
+function load(k, d) { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } }
+function persist(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }
+
+let state = {
+  balances: load('treso_balances', { CA: null, BO: null, CE: null }),
+  config:   load('treso_config',   { salary: null, charges: null }),
+  ops:      load('treso_ops',      [])
+};
+
+function saveOps()      { persist('treso_ops', state.ops); }
+function saveBalances() { persist('treso_balances', state.balances); }
+function saveConfig()   { persist('treso_config', state.config); }
+
+function fmt(n) {
+  return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 2 }).format(n);
+}
+function currentBalances() {
+  const b = { CA: state.balances.CA || 0, BO: state.balances.BO || 0, CE: state.balances.CE || 0 };
+  state.ops.forEach(op => {
+    const sign = op.type === 'credit' ? 1 : -1;
+    if (b[op.bank] !== undefined) b[op.bank] = Math.round((b[op.bank] + sign * op.amount) * 100) / 100;
+  });
+  return b;
+}
+
+let currentView = 'dashboard';
+let catChartInst = null, trendChartInst = null;
+
+function showView(id) {
+  document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.id === 'view-' + id));
+  document.querySelectorAll('nav button').forEach((b, i) => {
+    b.classList.toggle('active', ['dashboard','add','stats','settings'][i] === id);
+  });
+  currentView = id;
+  if (id === 'dashboard') renderDashboard();
+  if (id === 'stats') renderStats();
+  if (id === 'settings') renderSettings();
+  if (id === 'add') renderAddForm();
+}
+
+function renderDashboard() {
+  const el = document.getElementById('view-dashboard');
+  const configured = Object.values(state.balances).some(v => v !== null);
+  const bal = currentBalances();
+  const total = Object.values(bal).reduce((a, b) => a + b, 0);
+  const today = new Date().getDate();
+
+  const alerts = [];
+  if (!configured) alerts.push({ type: 'warn', msg: 'Configure tes soldes dans Réglages pour commencer.' });
+  if (bal.CA < 200 && configured) alerts.push({ type: 'danger', msg: 'Crédit Agricole bas : ' + fmt(bal.CA) });
+  if (bal.BO < 100 && configured) alerts.push({ type: 'danger', msg: 'Boursorama bas : ' + fmt(bal.BO) });
+  if (today >= 27 && today <= 30) alerts.push({ type: 'warn', msg: 'Salaire attendu ces prochains jours sur Crédit Agricole.' });
+  if (alerts.length === 0) alerts.push({ type: 'ok', msg: 'Tout est en ordre.' });
+
+  const recent = [...state.ops].reverse().slice(0, 5);
+  const now = new Date();
+  const monthOps = state.ops.filter(op => {
+    const d = new Date(op.date);
+    return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear() && op.type === 'debit';
+  });
+  const monthTotal = monthOps.reduce((s, o) => s + o.amount, 0);
+
+  el.innerHTML =
+    '<div class="page-header">Trésorerie</div>' +
+    (!configured ? '<div class="setup-prompt"><p>Renseigne tes soldes de départ pour commencer</p><button class="btn btn-sm" onclick="showView(\'settings\')">Configurer →</button></div>' : '') +
+    '<div class="section-label">Soldes actuels</div>' +
+    '<div class="bank-grid">' +
+    ['CA','BO','CE'].map(bk =>
+      '<div class="bank-card ' + bk.toLowerCase() + '" onclick="showBankDetail(\'' + bk + '\')">' +
+      '<div class="bk-name">' + (bk === 'CA' ? 'Crédit Agri.' : bk === 'BO' ? 'Boursorama' : 'Caisse d\'Ép.') + '</div>' +
+      '<div class="bk-amount' + (bal[bk] < 0 ? ' neg' : '') + '">' + fmt(bal[bk]) + '</div>' +
+      '<div class="bk-tap">Voir détail →</div></div>'
+    ).join('') +
+    '</div>' +
+    '<div class="total-strip"><span class="t-label">Total toutes banques</span><span class="t-amount' + (total < 0 ? ' neg' : '') + '">' + fmt(total) + '</span></div>' +
+    '<div class="section-label">Alertes</div>' +
+    alerts.map(a => '<div class="alert alert-' + a.type + '">' + a.msg + '</div>').join('') +
+    '<div class="section-label" style="margin-top:16px;">Ce mois — ' + fmt(monthTotal) + ' dépensés</div>' +
+    '<div class="card"><div class="chart-wrap"><canvas id="donut-chart" role="img" aria-label="Dépenses par catégorie"></canvas></div><div id="donut-legend" class="legend"></div></div>' +
+    '<div class="section-label">Projection 3 mois</div><div class="card" id="proj-card"></div>' +
+    '<div class="section-label">Dernières opérations</div>' +
+    '<div class="card">' + (recent.length === 0 ? '<p style="font-size:13px;color:var(--text3);">Aucune opération enregistrée.</p>' : recent.map(opRow).join('')) + '</div>';
+
+  const catTotals = {};
+  monthOps.forEach(op => { catTotals[op.cat] = (catTotals[op.cat] || 0) + op.amount; });
+  const catLabels = Object.keys(catTotals);
+  const catData = catLabels.map(c => Math.round(catTotals[c] * 100) / 100);
+
+  if (catChartInst) { catChartInst.destroy(); catChartInst = null; }
+  if (catLabels.length > 0) {
+    catChartInst = new Chart(document.getElementById('donut-chart'), {
+      type: 'doughnut',
+      data: { labels: catLabels, datasets: [{ data: catData, backgroundColor: CAT_COLORS.slice(0, catLabels.length), borderWidth: 0 }] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, cutout: '65%' }
+    });
+    document.getElementById('donut-legend').innerHTML = catLabels.map((l, i) =>
+      '<div class="legend-item"><div class="legend-dot" style="background:' + CAT_COLORS[i] + '"></div>' + l.split('/')[0] + ': ' + fmt(catData[i]) + '</div>'
+    ).join('');
+  } else {
+    document.querySelector('.chart-wrap').innerHTML = '<p style="font-size:12px;color:var(--text3);text-align:center;padding:3rem 0;">Aucune dépense ce mois</p>';
+  }
+
+  const salary = state.config.salary || 0;
+  const charges = state.config.charges || 0;
+  const avgSix = (() => {
+    let totals = [];
+    for (let i = 1; i <= 6; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const t = state.ops.filter(op => { const od = new Date(op.date); return od.getMonth() === d.getMonth() && od.getFullYear() === d.getFullYear() && op.type === 'debit'; }).reduce((s, o) => s + o.amount, 0);
+      totals.push(t);
+    }
+    const nz = totals.filter(t => t > 0);
+    return nz.length > 0 ? nz.reduce((a, b) => a + b, 0) / nz.length : 0;
+  })();
+
+  const projMonths = [];
+  for (let i = 1; i <= 3; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+    projMonths.push({ label: d.toLocaleDateString('fr-FR', { month: 'long' }), proj: Math.round((total + (salary - charges - avgSix) * i) * 100) / 100 });
+  }
+  const maxAbs = Math.max(...projMonths.map(p => Math.abs(p.proj)), 1);
+  document.getElementById('proj-card').innerHTML = projMonths.map(p => {
+    const pct = (Math.min(Math.abs(p.proj) / maxAbs * 100, 100)).toFixed(1);
+    const color = p.proj < 0 ? '#E24B4A' : p.proj < 300 ? '#BA7517' : '#1D9E75';
+    return '<div class="proj-row"><span class="proj-label">' + p.label + '</span><div class="proj-track"><div class="proj-fill" style="width:' + pct + '%;background:' + color + ';"></div></div><span class="proj-val" style="color:' + color + ';">' + fmt(p.proj) + '</span></div>';
+  }).join('');
+}
+
+function opRow(op) {
+  const date = new Date(op.date).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' });
+  return '<div class="op-row"><div><div class="op-title">' + op.desc + '</div><div class="op-sub"><span class="dot" style="background:' + BANK_COLORS[op.bank] + '"></span>' + op.cat + ' · ' + date + '</div></div><span class="op-amount ' + (op.type === 'credit' ? 'pos' : 'neg') + '">' + (op.type === 'credit' ? '+' : '−') + fmt(op.amount) + '</span></div>';
+}
+
+function showBankDetail(bk) {
+  const el = document.getElementById('view-dashboard');
+  const bal = currentBalances();
+  const ops = [...state.ops].filter(o => o.bank === bk).reverse();
+  el.innerHTML =
+    '<button class="back-btn" onclick="renderDashboard()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>Retour</button>' +
+    '<div class="detail-header"><span class="bank-name" style="color:' + BANK_COLORS[bk] + '">' + BANKS[bk] + '</span><span class="bank-bal' + (bal[bk] < 0 ? ' neg' : '') + '">' + fmt(bal[bk]) + '</span></div>' +
+    '<div class="section-label">' + ops.length + ' opération' + (ops.length > 1 ? 's' : '') + '</div>' +
+    '<div class="card ops-scroll">' + (ops.length === 0 ? '<p style="font-size:13px;color:var(--text3);">Aucune opération.</p>' : ops.map(opRow).join('')) + '</div>';
+}
+
+function renderAddForm() {
+  const today = new Date().toISOString().split('T')[0];
+  document.getElementById('view-add').innerHTML =
+    '<div class="page-header">Nouvelle opération</div>' +
+    '<div class="section-label">Saisie rapide</div>' +
+    '<div class="quick-bar"><input type="text" id="quick-in" placeholder=\'ex: "Leclerc 45 Boursorama"\' /><button onclick="parseQuick()">→</button></div>' +
+    '<p style="font-size:11px;color:var(--text3);margin-bottom:20px;margin-top:-10px;">Banques : CA · Boursorama · CE</p>' +
+    '<div class="section-label">Formulaire complet</div>' +
+    '<div class="card">' +
+    '<div class="form-group"><label>Montant (€)</label><input type="number" id="op-amount" placeholder="45.00" step="0.01" min="0" /></div>' +
+    '<div class="form-group"><label>Description</label><input type="text" id="op-desc" placeholder="Leclerc courses" /></div>' +
+    '<div class="form-group"><label>Catégorie</label><select id="op-cat">' + CATS.map(c => '<option>' + c + '</option>').join('') + '</select></div>' +
+    '<div class="form-group"><label>Banque</label><select id="op-bank"><option value="CA">Crédit Agricole</option><option value="BO">Boursorama</option><option value="CE">Caisse d\'Épargne</option></select></div>' +
+    '<div class="form-group"><label>Type</label><select id="op-type"><option value="debit">Dépense</option><option value="credit">Crédit / Remboursement</option></select></div>' +
+    '<div class="form-group"><label>Date</label><input type="date" id="op-date" value="' + today + '" /></div>' +
+    '<button class="btn" onclick="addOp()">Enregistrer</button></div>';
+}
+
+function addOp() {
+  const amount = parseFloat(document.getElementById('op-amount').value);
+  const desc   = document.getElementById('op-desc').value.trim();
+  const cat    = document.getElementById('op-cat').value;
+  const bank   = document.getElementById('op-bank').value;
+  const type   = document.getElementById('op-type').value;
+  const date   = document.getElementById('op-date').value || new Date().toISOString().split('T')[0];
+  if (!amount || !desc) { alert('Montant et description requis.'); return; }
+  state.ops.push({ id: Date.now(), amount, desc, cat, bank, type, date });
+  saveOps();
+  showView('dashboard');
+}
+
+function parseQuick() {
+  const raw = document.getElementById('quick-in').value.trim();
+  if (!raw) return;
+  let bank = null;
+  if (/boursorama/i.test(raw)) bank = 'BO';
+  else if (/\bca\b|cr.dit.agri/i.test(raw)) bank = 'CA';
+  else if (/\bce\b|caisse/i.test(raw)) bank = 'CE';
+  const m = raw.match(/(\d+(?:[.,]\d+)?)/);
+  const amount = m ? parseFloat(m[1].replace(',', '.')) : null;
+  if (!amount) { alert('Montant non détecté.'); return; }
+  const desc = raw.replace(/\d+[.,]?\d*/g, '').replace(/boursorama|cr.dit.agricole|caisse.d..pagne|\bca\b|\bce\b/gi, '').replace(/€/g, '').trim() || 'Opération';
+  if (!bank) {
+    document.getElementById('op-amount').value = amount;
+    document.getElementById('op-desc').value = desc;
+    alert('Banque non détectée — sélectionne-la dans le formulaire.');
+    return;
+  }
+  state.ops.push({ id: Date.now(), amount, desc, cat: 'Autre', bank, type: 'debit', date: new Date().toISOString().split('T')[0] });
+  saveOps();
+  showView('dashboard');
+}
+
+function renderStats() {
+  const el = document.getElementById('view-stats');
+  const now = new Date();
+  const months = [], trend = [];
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    months.push(d.toLocaleDateString('fr-FR', { month: 'short' }));
+    const t = state.ops.filter(op => { const od = new Date(op.date); return od.getMonth() === d.getMonth() && od.getFullYear() === d.getFullYear() && op.type === 'debit'; }).reduce((s, o) => s + o.amount, 0);
+    trend.push(Math.round(t * 100) / 100);
+  }
+  el.innerHTML =
+    '<div class="page-header">Statistiques</div>' +
+    '<div class="section-label">Dépenses — 6 derniers mois</div>' +
+    '<div class="card"><div class="chart-wrap"><canvas id="trend-chart" role="img" aria-label="Évolution 6 mois"></canvas></div></div>' +
+    '<div class="section-label">Répartition par banque ce mois</div>' +
+    '<div class="card"><div class="chart-wrap"><canvas id="bank-chart" role="img" aria-label="Répartition par banque"></canvas></div></div>';
+
+  if (trendChartInst) { trendChartInst.destroy(); trendChartInst = null; }
+  trendChartInst = new Chart(document.getElementById('trend-chart'), {
+    type: 'bar',
+    data: { labels: months, datasets: [{ data: trend, backgroundColor: '#378ADD22', borderColor: '#378ADD', borderWidth: 1.5, borderRadius: 5 }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { display: false }, ticks: { font: { size: 11 } } }, y: { grid: { color: 'rgba(0,0,0,0.04)' }, ticks: { font: { size: 11 }, callback: v => v + '€' } } } }
+  });
+
+  const monthOps = state.ops.filter(op => { const od = new Date(op.date); return od.getMonth() === now.getMonth() && od.getFullYear() === now.getFullYear() && op.type === 'debit'; });
+  const bt = { CA: 0, BO: 0, CE: 0 };
+  monthOps.forEach(op => { bt[op.bank] += op.amount; });
+  new Chart(document.getElementById('bank-chart'), {
+    type: 'doughnut',
+    data: { labels: ['Crédit Agricole','Boursorama','Caisse d\'Épargne'], datasets: [{ data: [Math.round(bt.CA), Math.round(bt.BO), Math.round(bt.CE)], backgroundColor: ['#378ADD','#1D9E75','#D85A30'], borderWidth: 0 }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { font: { size: 11 }, boxWidth: 10 } } }, cutout: '55%' }
   });
 }
+
+function renderSettings() {
+  const el = document.getElementById('view-settings');
+  el.innerHTML =
+    '<div class="page-header">Réglages</div>' +
+    '<div class="section-label">Soldes de départ</div>' +
+    '<div class="card">' +
+    '<div class="form-group"><label><span class="dot" style="background:var(--ca)"></span>Crédit Agricole (€)</label><input type="number" id="bal-ca" step="0.01" placeholder="0.00" value="' + (state.balances.CA !== null ? state.balances.CA : '') + '" /></div>' +
+    '<div class="form-group"><label><span class="dot" style="background:var(--bo)"></span>Boursorama (€)</label><input type="number" id="bal-bo" step="0.01" placeholder="0.00" value="' + (state.balances.BO !== null ? state.balances.BO : '') + '" /></div>' +
+    '<div class="form-group"><label><span class="dot" style="background:var(--ce)"></span>Caisse d\'Épargne (€)</label><input type="number" id="bal-ce" step="0.01" placeholder="0.00" value="' + (state.balances.CE !== null ? state.balances.CE : '') + '" /></div>' +
+    '<button class="btn" onclick="saveBalancesFromForm()">Enregistrer les soldes</button></div>' +
+    '<div class="section-label">Salaire & charges fixes</div>' +
+    '<div class="card">' +
+    '<div class="form-group"><label>Salaire net mensuel (€)</label><input type="number" id="cfg-salary" step="1" placeholder="2500" value="' + (state.config.salary || '') + '" /></div>' +
+    '<div class="form-group"><label>Total charges fixes/mois (€)</label><input type="number" id="cfg-charges" step="1" placeholder="800" value="' + (state.config.charges || '') + '" /></div>' +
+    '<button class="btn" onclick="saveConfigFromForm()">Enregistrer</button>' +
+    '<p style="font-size:11px;color:var(--text3);margin-top:12px;">Pour le détail des charges, glisse ton fichier Excel dans la conversation Claude.</p></div>' +
+    '<div class="section-label">Données</div>' +
+    '<div class="card"><p style="font-size:13px;color:var(--text2);margin-bottom:12px;">' + state.ops.length + ' opération(s) enregistrée(s)</p><button class="btn btn-danger" onclick="clearData()">Réinitialiser toutes les données</button></div>';
+}
+
+function saveBalancesFromForm() {
+  const ca = parseFloat(document.getElementById('bal-ca').value);
+  const bo = parseFloat(document.getElementById('bal-bo').value);
+  const ce = parseFloat(document.getElementById('bal-ce').value);
+  state.balances = { CA: isNaN(ca) ? 0 : ca, BO: isNaN(bo) ? 0 : bo, CE: isNaN(ce) ? 0 : ce };
+  saveBalances();
+  showView('dashboard');
+}
+
+function saveConfigFromForm() {
+  const salary  = parseFloat(document.getElementById('cfg-salary').value);
+  const charges = parseFloat(document.getElementById('cfg-charges').value);
+  state.config = { salary: isNaN(salary) ? null : salary, charges: isNaN(charges) ? null : charges };
+  saveConfig();
+  showView('dashboard');
+}
+
+function clearData() {
+  if (!confirm('Supprimer toutes les opérations et réglages ?')) return;
+  ['treso_balances','treso_config','treso_ops'].forEach(k => localStorage.removeItem(k));
+  state = { balances: { CA: null, BO: null, CE: null }, config: { salary: null, charges: null }, ops: [] };
+  showView('dashboard');
+}
+
+renderDashboard();
 </script>
 </body>
 </html>
